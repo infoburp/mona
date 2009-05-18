@@ -45,9 +45,8 @@ typedef unsigned long long int uint64_t;
 #ifndef NUM_POINTS
 #define NUM_POINTS 3
 #endif
-
 #ifndef NUM_SHAPES
-#define NUM_SHAPES 100
+#define NUM_SHAPES 50
 #endif
 
 #include <stdio.h>
@@ -136,6 +135,8 @@ size_t offset_color_by(unsigned char a, int max) {
   return a + offset;
 }
 
+size_t offset_int_with_bounds;
+
 void dump_best() {
   //  char filename[50];
   //  sprintf(filename, "%d.data", getpid());
@@ -193,6 +194,7 @@ void init_dna(shape_t * dna)
 }
 
 int lowestdiff = INT_MAX;
+int highestdiff = INT_MAX;
 int teststep = 0;
 int beststep = 0;
 
@@ -203,9 +205,9 @@ int fitness() {
 void mutate() {
   // psydo simulated annealing ->
   // make the number and size of the mutations perportional to the fittness
-  size_t mutations_to_do = lowestdiff / 1000000;
-  if(mutations_to_do < 2)
-    mutations_to_do = 2;
+//  size_t mutations_to_do = highestdiff / lowestdiff;
+//  mutations_to_do = (mutations_to_do >= 20 ? 1 : 21 - mutations_to_do);
+  size_t mutations_to_do = 2;
 
   for(size_t mutation_n=0; mutation_n!=mutations_to_do; ++mutation_n) {
 
@@ -224,13 +226,14 @@ void mutate() {
 
     // mutate shape
     else if(mutation_kind<100) {
-      int point_i = RANDINT(NUM_POINTS);
-      //for(int point_i = 0; point_i!=NUM_POINTS; ++point_i) {
-      dna_test[mutated_shape].points[point_i].x += (int)RANDOFFSET(WIDTH/10.0);
-      dna_test[mutated_shape].points[point_i].x = CLAMP(dna_test[mutated_shape].points[point_i].x, 0, WIDTH-1);
+      //int point_i = RANDINT(NUM_POINTS);
+      for(int point_i = 0; point_i!=NUM_POINTS; ++point_i) {
+	dna_test[mutated_shape].points[point_i].x += (int)RANDOFFSET(WIDTH/10.0);
+	dna_test[mutated_shape].points[point_i].x = CLAMP(dna_test[mutated_shape].points[point_i].x, 0, WIDTH-1);
 
-      dna_test[mutated_shape].points[point_i].y += (int)RANDOFFSET(HEIGHT/10.0);
-      dna_test[mutated_shape].points[point_i].y = CLAMP(dna_test[mutated_shape].points[point_i].y, 0, HEIGHT-1);
+	dna_test[mutated_shape].points[point_i].y += (int)RANDOFFSET(HEIGHT/10.0);
+	dna_test[mutated_shape].points[point_i].y = CLAMP(dna_test[mutated_shape].points[point_i].y, 0, HEIGHT-1);
+      }
     }
 
     // mutate stacking
@@ -529,6 +532,8 @@ static void mainloop(cairo_surface_t * pngsurf)
 
     draw_dna(dna_test, test_cr);
     int diff = difference(test_surf, goalsurf);
+    if(highestdiff == INT_MAX)
+      highestdiff = diff;
 
     MENES_RDTSC(t2); test_time += t2 - t1;
 
