@@ -1,11 +1,11 @@
-// mona.c - png -> svg via genetic algorithm 
+// mona.c - png -> svg via genetic algorithm
 // Copyright (c) 2009 David Salamon <dls@lithp.org>
 
 /*
  *        Redistribution and use in source and binary
  * forms, with or without modification, are permitted
  * provided that the following conditions are met:
- * 
+ *
  * 1. Redistributions of source code must retain the
  *    above copyright notice, this list of conditions
  *    and the following disclaimer.
@@ -17,7 +17,7 @@
  * 3. The name of the author may not be used to endorse
  *    or promote products derived from this software
  *    without specific prior written permission.
- * 
+ *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS''
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
  * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
@@ -37,6 +37,8 @@
 // special thanks to nick welch <nick@incise.org> for the cairo & X11 glue code
 
 typedef unsigned long long int uint64_t;
+
+// the following macro is copyright Jay Freeman (Saurik) under the above license
 #define MENES_RDTSC(x) \
     __asm__ volatile ("rdtsc" : "=A" (x)); \
 
@@ -117,7 +119,7 @@ struct point_t {
 };
 
 struct shape_t {
-  int r, g, b; // 0 - 255
+  unsigned char r, g, b; // 0 - 255
   double a; // 0 < a < 1
   point_t points[NUM_POINTS];
 };
@@ -125,7 +127,14 @@ struct shape_t {
 shape_t dna_best[NUM_SHAPES];
 shape_t dna_test[NUM_SHAPES];
 
-int mutated_shape;
+size_t offset_color_by(unsigned char a, int max) {
+  int offset = ((random() / (double)RAND_MAX) * max) - (max / 2);
+  if(offset < 0 && abs(offset) > a)
+    return 0;
+  if(offset > 0 && (offset + a) < a)
+    return 255;
+  return a + offset;
+}
 
 void dump_best() {
   //  char filename[50];
@@ -183,70 +192,55 @@ void init_dna(shape_t * dna)
   }
 }
 
-int MAX_FITNESS = -1;
 int lowestdiff = INT_MAX;
 int teststep = 0;
 int beststep = 0;
 
-double fitness() {
-  return ((MAX_FITNESS-lowestdiff) / (double)MAX_FITNESS)*100;
+int fitness() {
+  return lowestdiff;
 }
 
-int mutate() {
-  mutated_shape = RANDINT(NUM_SHAPES);
-  double roulette = RANDDOUBLE(2.05);
+void mutate() {
+  // psydo simulated annealing ->
+  // make the number and size of the mutations perportional to the fittness
+  size_t mutations_to_do = lowestdiff / 1000000;
+  if(mutations_to_do < 2)
+    mutations_to_do = 2;
 
-  double fit = fitness();
-  double drastic = RANDDOUBLE(1.0 + (fit / 100.0));
+  for(size_t mutation_n=0; mutation_n!=mutations_to_do; ++mutation_n) {
 
-  double mutation_rate = sqrt(100.0 - fit);
-  double color_mutaiton_rate = mutation_rate / 100.0;
+    size_t mutated_shape = RANDINT(NUM_SHAPES);
 
-  // mutate color
-  if(roulette<0.25) {
-    if(drastic < 1)
-      dna_test[mutated_shape].a = CLAMP(dna_test[mutated_shape].a + RANDOFFSET(color_mutaiton_rate), 0.1, 1.0);
-    else
-      dna_test[mutated_shape].a = RANDDOUBLE(1.0);
+    // 0-49: color, 50-99: shape, 100-115: stacking
+    size_t mutation_kind = RANDINT(115);
 
-    dna_test[mutated_shape].r = CLAMP(dna_test[mutated_shape].r + RANDOFFSET(10), 0.0, 1.0);
-    dna_test[mutated_shape].g = CLAMP(dna_test[mutated_shape].g + RANDOFFSET(10), 0.0, 1.0);
-    dna_test[mutated_shape].b = CLAMP(dna_test[mutated_shape].b + RANDOFFSET(10), 0.0, 1.0);
-  }
-
-  // mutate shape
-  else if(roulette < 1.25) {
-    int point_i = RANDINT(NUM_POINTS);
-    //for(int point_i = 0; point_i!=NUM_POINTS; ++point_i) {
-    if(roulette<0.75) {
-      if(drastic < 1) {
-	dna_test[mutated_shape].points[point_i].x += (int)RANDOFFSET(WIDTH/mutation_rate); // was WIDTH / 10.0
-	dna_test[mutated_shape].points[point_i].x = CLAMP(dna_test[mutated_shape].points[point_i].x, 0, WIDTH-1);
-      }
-      else
-	dna_test[mutated_shape].points[point_i].x = RANDINT(WIDTH);
+    // mutate color
+    if(mutation_kind<50) {
+      dna_test[mutated_shape].r = offset_color_by(dna_test[mutated_shape].r, 8);
+      dna_test[mutated_shape].g = offset_color_by(dna_test[mutated_shape].g, 8);
+      dna_test[mutated_shape].b = offset_color_by(dna_test[mutated_shape].b, 8);
+      dna_test[mutated_shape].a = CLAMP(dna_test[mutated_shape].a + RANDOFFSET(0.1), 0.1, 1.0);
     }
 
+    // mutate shape
+    else if(mutation_kind<100) {
+      int point_i = RANDINT(NUM_POINTS);
+      //for(int point_i = 0; point_i!=NUM_POINTS; ++point_i) {
+      dna_test[mutated_shape].points[point_i].x += (int)RANDOFFSET(WIDTH/10.0);
+      dna_test[mutated_shape].points[point_i].x = CLAMP(dna_test[mutated_shape].points[point_i].x, 0, WIDTH-1);
+
+      dna_test[mutated_shape].points[point_i].y += (int)RANDOFFSET(HEIGHT/10.0);
+      dna_test[mutated_shape].points[point_i].y = CLAMP(dna_test[mutated_shape].points[point_i].y, 0, HEIGHT-1);
+    }
+
+    // mutate stacking
     else {
-      if(drastic < 1) {
-	dna_test[mutated_shape].points[point_i].y += (int)RANDOFFSET(HEIGHT/mutation_rate); // was HEIGHT / 10.0
-	dna_test[mutated_shape].points[point_i].y = CLAMP(dna_test[mutated_shape].points[point_i].y, 0, HEIGHT-1);
-      }
-      else
-	dna_test[mutated_shape].points[point_i].y = RANDINT(HEIGHT);
+      int destination = RANDINT(NUM_SHAPES);
+      shape_t s = dna_test[mutated_shape];
+      dna_test[mutated_shape] = dna_test[destination];
+      dna_test[destination] = s;
     }
-    //}
   }
-
-  // mutate stacking
-  else {
-    int destination = RANDINT(NUM_SHAPES);
-    shape_t s = dna_test[mutated_shape];
-    dna_test[mutated_shape] = dna_test[destination];
-    dna_test[destination] = s;
-    return destination;
-  }
-  return -1;
 }
 
 uint64_t t1=0, t2=0, t3=0, pit_time=0, ptime_s=0, ptime_e=0;
@@ -265,11 +259,11 @@ bool point_in_triangle(size_t i, size_t y, size_t x) {
   pit_time += ptime_e - ptime_s;
   return tr;
 
-//  A=(x1,y1) B=(x2,y2), C=(x3,y3) 
-//  Area= abs(x1*y2+x2*y3+x3*y1-x1*y3-x3*y2-x2*y1)/2 
-//  Area PAB+Area PBC +Area PAC=Area ABC 
+//  A=(x1,y1) B=(x2,y2), C=(x3,y3)
+//  Area= abs(x1*y2+x2*y3+x3*y1-x1*y3-x3*y2-x2*y1)/2
+//  Area PAB+Area PBC +Area PAC=Area ABC
 
-  // barycentric solution... 
+  // barycentric solution...
   // see http://www.blackpawn.com/texts/pointinpoly/default.html
 
   // compute vectors
@@ -315,7 +309,7 @@ void pull_colour(cairo_surface_t * goal_surf, size_t max_terations) {
   for(size_t iterct = 0; made_change && iterct != max_terations; ++iterct) {
     made_change = false;
 
-    for(int i = 0; i!=NUM_SHAPES; ++i) {      
+    for(int i = 0; i!=NUM_SHAPES; ++i) {
       if(max_terations < 10)
 	i = RANDINT(NUM_SHAPES);
       // WARNING: the following code only works for triangles
@@ -433,7 +427,7 @@ void pull_colour(cairo_surface_t * goal_surf, size_t max_terations) {
 	  }
 	}
       }
-      
+
     } // while(made_change);
   }
 }
@@ -470,39 +464,20 @@ int dist(cairo_surface_t * goal_surf) {
 }
 
 int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf) {
-  unsigned char * test_data = cairo_image_surface_get_data(test_surf);
   if(!goal_data)
     goal_data = cairo_image_surface_get_data(goal_surf);
+  unsigned char * test_data = cairo_image_surface_get_data(test_surf);
 
   int difference = 0;
-  int my_max_fitness = 0;
 
   for(size_t y = 0; y < HEIGHT; y++) {
     for(size_t x = 0; x < WIDTH; x++) {
-      int thispixel = y*WIDTH*4 + x*4;
-
-      unsigned char test_a = test_data[thispixel];
-      unsigned char test_r = test_data[thispixel + 1];
-      unsigned char test_g = test_data[thispixel + 2];
-      unsigned char test_b = test_data[thispixel + 3];
-
-      unsigned char goal_a = goal_data[thispixel];
-      unsigned char goal_r = goal_data[thispixel + 1];
-      unsigned char goal_g = goal_data[thispixel + 2];
-      unsigned char goal_b = goal_data[thispixel + 3];
-
-      if(MAX_FITNESS == -1)
-	my_max_fitness += goal_a + goal_r + goal_g + goal_b;
-
-      difference += ABS(test_a - goal_a);
-      difference += ABS(test_r - goal_r);
-      difference += ABS(test_g - goal_g);
-      difference += ABS(test_b - goal_b);
+      size_t pix_idx = y*WIDTH*4 + x*4;
+      for(size_t i=0; i!=4; ++i)
+	difference += ABS(test_data[pix_idx + i] - goal_data[pix_idx + i]);
     }
   }
 
-  if(MAX_FITNESS == -1)
-    MAX_FITNESS = my_max_fitness;
   return difference;
 }
 
@@ -557,7 +532,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 
     MENES_RDTSC(t2); test_time += t2 - t1;
 
-    //std::cout << "diff: " << diff << "\tdiff2: " << dist(goalsurf) << std::endl;
+//    std::cout << "diff: " << diff << "\tdiff2: " << dist(goalsurf) << std::endl;
 
     if(diff < lowestdiff) {         // test is good, copy to best
       beststep++;
