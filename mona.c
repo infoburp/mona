@@ -71,8 +71,8 @@ typedef unsigned long long int uint64_t;
 #define CLAMP(val, min, max) ((val) < (min) ? (min) :		\
                               (val) > (max) ? (max) : (val))
 
-int WIDTH;
-int HEIGHT;
+size_t WIDTH;
+size_t HEIGHT;
 
 //////////////////////// X11 stuff ////////////////////////
 #ifdef SHOWWINDOW
@@ -192,8 +192,7 @@ double fitness() {
   return ((MAX_FITNESS-lowestdiff) / (double)MAX_FITNESS)*100;
 }
 
-int mutate()
-{
+int mutate() {
   mutated_shape = RANDINT(NUM_SHAPES);
   double roulette = RANDDOUBLE(2.05);
 
@@ -332,8 +331,8 @@ void pull_colour(cairo_surface_t * goal_surf, size_t max_terations) {
 	for(int vj=0; vj!=3; ++vj)
 	  votes[vi][vj] = 0;
 
-      for(int y = miny; y <= maxy; y++) {
-	for(int x = minx; x <= maxx; x++) {
+      for(size_t y = miny; y <= maxy; y++) {
+	for(size_t x = minx; x <= maxx; x++) {
 	  if(! point_in_triangle(i, x,y))
 	    continue;
 
@@ -445,10 +444,9 @@ int dist(cairo_surface_t * goal_surf) {
     goal_data = cairo_image_surface_get_data(goal_surf);
 
   int difference = 0;
-  int my_max_fitness = 0;
 
-  for(int y = 0; y < HEIGHT; y++) {
-    for(int x = 0; x < WIDTH; x++) {
+  for(size_t y = 0; y < HEIGHT; y++) {
+    for(size_t x = 0; x < WIDTH; x++) {
       // render just this pixel...
       double pixel[4] = {0.0, 0.0, 0.0, 0.0};
       for(int j=0; j!=NUM_SHAPES; ++j) {
@@ -462,25 +460,12 @@ int dist(cairo_surface_t * goal_surf) {
 	pixel[3] += dna_test[j].a * dna_test[j].b;
       }
 
-      int thispixel = y*WIDTH*4 + x*4;
-
-      unsigned char goal_a = goal_data[thispixel];
-      unsigned char goal_r = goal_data[thispixel + 1];
-      unsigned char goal_g = goal_data[thispixel + 2];
-      unsigned char goal_b = goal_data[thispixel + 3];
-
-      if(MAX_FITNESS == -1)
-	my_max_fitness += goal_a + goal_r + goal_g + goal_b;
-
-      difference += ABS(((unsigned char) pixel[0]) - goal_a);
-      difference += ABS(((unsigned char) pixel[1]) - goal_r);
-      difference += ABS(((unsigned char) pixel[2]) - goal_g);
-      difference += ABS(((unsigned char) pixel[3]) - goal_b);      
+      int pix_offset = y*WIDTH*4 + x*4;
+      for(int tj=0; tj!=4; ++tj)
+	difference += ABS(((unsigned char) pixel[tj]) - goal_data[pix_offset + tj]);
     }
   }
 
-  if(MAX_FITNESS == -1)
-    MAX_FITNESS = my_max_fitness;
   return difference;
 }
 
@@ -492,8 +477,8 @@ int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf) {
   int difference = 0;
   int my_max_fitness = 0;
 
-  for(int y = 0; y < HEIGHT; y++) {
-    for(int x = 0; x < WIDTH; x++) {
+  for(size_t y = 0; y < HEIGHT; y++) {
+    for(size_t x = 0; x < WIDTH; x++) {
       int thispixel = y*WIDTH*4 + x*4;
 
       unsigned char test_a = test_data[thispixel];
@@ -572,8 +557,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 
     MENES_RDTSC(t2); test_time += t2 - t1;
 
-//    int diff2 = dist(goalsurf);
-//    std::cout << "diff: " << diff << "\tdiff2: " << diff2 << std::endl;
+    //std::cout << "diff: " << diff << "\tdiff2: " << dist(goalsurf) << std::endl;
 
     if(diff < lowestdiff) {         // test is good, copy to best
       beststep++;
@@ -599,7 +583,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 
     if(teststep % 100 == 0) {
       std::cout << "Step = " << beststep << " / " << teststep << std::endl;
-      std::cout << "Fitness = " << ((MAX_FITNESS-lowestdiff) / (float)MAX_FITNESS)*100 << std::endl;
+      std::cout << "Fitness = " << fitness() << std::endl;
       std::cout << "Mutate time: " << mutate_time << std::endl;
       std::cout << "Color time: " << color_time << std::endl;
       std::cout << "Pit time: " << pit_time << std::endl;
@@ -627,6 +611,12 @@ static void mainloop(cairo_surface_t * pngsurf)
 }
 
 int main(int argc, char ** argv) {
+  if(NUM_POINTS != 3) {
+    // color pulling is currently only implemented for triangles
+    std::cout << "Error -- all true shapes have exactly three points." << std::endl;
+    exit(1);
+  }
+
   signal(SIGINT, handle_signal);
 
   cairo_surface_t * pngsurf;
