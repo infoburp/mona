@@ -1,6 +1,40 @@
-// Copyright (c) 2009 David Salamon
+// mona.c - png -> svg via genetic algorithm 
+// Copyright (c) 2009 David Salamon <dls@lithp.org>
 
-// special thanks to nick welch <nick@incise.org> (who disclaims copyright) for the cairo & X11 glue code
+/*
+ *        Redistribution and use in source and binary
+ * forms, with or without modification, are permitted
+ * provided that the following conditions are met:
+ * 
+ * 1. Redistributions of source code must retain the
+ *    above copyright notice, this list of conditions
+ *    and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the
+ *    above copyright notice, this list of conditions
+ *    and the following disclaimer in the documentation
+ *    and/or other materials provided with the
+ *    distribution.
+ * 3. The name of the author may not be used to endorse
+ *    or promote products derived from this software
+ *    without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS''
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING,
+ * BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+ * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+ * LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+ * TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+ * ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+// special thanks to nick welch <nick@incise.org> for the cairo & X11 glue code
 
 typedef unsigned long long int uint64_t;
 #define MENES_RDTSC(x) \
@@ -11,7 +45,7 @@ typedef unsigned long long int uint64_t;
 #endif
 
 #ifndef NUM_SHAPES
-#define NUM_SHAPES 50
+#define NUM_SHAPES 100
 #endif
 
 #include <stdio.h>
@@ -80,8 +114,6 @@ void x_init(void) {
 
 struct point_t {
   size_t x, y; // 0 - (MAX_(height/width) - 1)
-  point_t(size_t x0, size_t y0) : x(x0), y(y0) {}
-  point_t() : x(0), y(0) {}
 };
 
 struct shape_t {
@@ -177,6 +209,10 @@ int mutate()
       dna_test[mutated_shape].a = CLAMP(dna_test[mutated_shape].a + RANDOFFSET(color_mutaiton_rate), 0.1, 1.0);
     else
       dna_test[mutated_shape].a = RANDDOUBLE(1.0);
+
+    dna_test[mutated_shape].r = CLAMP(dna_test[mutated_shape].r + RANDOFFSET(10), 0.0, 1.0);
+    dna_test[mutated_shape].g = CLAMP(dna_test[mutated_shape].g + RANDOFFSET(10), 0.0, 1.0);
+    dna_test[mutated_shape].b = CLAMP(dna_test[mutated_shape].b + RANDOFFSET(10), 0.0, 1.0);
   }
 
   // mutate shape
@@ -217,15 +253,34 @@ int mutate()
 uint64_t t1=0, t2=0, t3=0, pit_time=0, ptime_s=0, ptime_e=0;
 bool point_in_triangle(size_t i, size_t y, size_t x) {
   MENES_RDTSC(ptime_s);
+#define X(n) dna_test[i].points[(n)].x
+#define Y(n) dna_test[i].points[(n)].y
+  double abc_area, ab_area, ac_area, bc_area;
+  abc_area = abs(X(0)*Y(1)+X(1)*Y(2)+X(2)*Y(0)-X(0)*Y(2)-X(2)*Y(1)-X(1)*Y(0))/2;
+  ab_area = abs(X(0)*Y(1)+X(1)*y+x*Y(0)-X(0)*y-x*Y(1)-X(1)*Y(0))/2;
+  ac_area = abs(X(0)*y+x*Y(2)+X(2)*Y(0)-X(0)*Y(2)-X(2)*y-x*Y(0))/2;
+  bc_area = abs(x*Y(1)+X(1)*Y(2)+X(2)*y-x*Y(2)-X(2)*Y(1)-X(1)*y)/2;
+
+  bool tr = abs(abc_area - (ab_area + ac_area + bc_area)) < 0.000000000001;
+  MENES_RDTSC(ptime_e);
+  pit_time += ptime_e - ptime_s;
+  return tr;
+
+//  A=(x1,y1) B=(x2,y2), C=(x3,y3) 
+//  Area= abs(x1*y2+x2*y3+x3*y1-x1*y3-x3*y2-x2*y1)/2 
+//  Area PAB+Area PBC +Area PAC=Area ABC 
+
   // barycentric solution... 
   // see http://www.blackpawn.com/texts/pointinpoly/default.html
 
   // compute vectors
-  point_t v0(dna_test[i].points[2].x - dna_test[i].points[0].x,
-	     dna_test[i].points[2].y - dna_test[i].points[0].y);
-  point_t v1(dna_test[i].points[1].x - dna_test[i].points[0].x,
-	     dna_test[i].points[1].y - dna_test[i].points[0].y);
-  point_t v2(x - dna_test[i].points[0].x, y - dna_test[i].points[0].y);
+  point_t v0, v1, v2;
+  v0.x = dna_test[i].points[2].x - dna_test[i].points[0].x;
+  v0.y = dna_test[i].points[2].y - dna_test[i].points[0].y;
+  v1.x = dna_test[i].points[1].x - dna_test[i].points[0].x;
+  v1.y = dna_test[i].points[1].y - dna_test[i].points[0].y;
+  v2.x = x - dna_test[i].points[0].x;
+  v2.y = y - dna_test[i].points[0].y;
 
   // compute dot products
   size_t dot00 = v0.x * v0.x + v0.y * v0.y;
@@ -241,8 +296,6 @@ bool point_in_triangle(size_t i, size_t y, size_t x) {
 
   // Check if point is in triangle
   bool result = (u > 0) && (v > 0) && (u + v < 1);
-  MENES_RDTSC(ptime_e);
-  pit_time += ptime_e - ptime_s;
   return result;
 }
 
@@ -253,12 +306,6 @@ T min(T a, T b) { return (a > b) ? b : a; }
 
 template <typename T>
 T max(T a, T b) { return (a > b) ? a : b; }
-
-// render three versions:
-// baseline
-// +1
-// -1
-// then VOTE in the triangle for best choice :)
 
 void pull_colour(cairo_surface_t * goal_surf, size_t max_terations) {
   if(!goal_data)
@@ -392,13 +439,57 @@ void pull_colour(cairo_surface_t * goal_surf, size_t max_terations) {
   }
 }
 
+
+int dist(cairo_surface_t * goal_surf) {
+  if(!goal_data)
+    goal_data = cairo_image_surface_get_data(goal_surf);
+
+  int difference = 0;
+  int my_max_fitness = 0;
+
+  for(int y = 0; y < HEIGHT; y++) {
+    for(int x = 0; x < WIDTH; x++) {
+      // render just this pixel...
+      double pixel[4] = {0.0, 0.0, 0.0, 0.0};
+      for(int j=0; j!=NUM_SHAPES; ++j) {
+	if(! point_in_triangle(j, x,y))
+	  continue;
+	for(int tj=0; tj!=4; ++tj)
+	  pixel[tj] *= (1.0 - dna_test[j].a);
+	pixel[0] += dna_test[j].a;
+	pixel[1] += dna_test[j].a * dna_test[j].r;
+	pixel[2] += dna_test[j].a * dna_test[j].g;
+	pixel[3] += dna_test[j].a * dna_test[j].b;
+      }
+
+      int thispixel = y*WIDTH*4 + x*4;
+
+      unsigned char goal_a = goal_data[thispixel];
+      unsigned char goal_r = goal_data[thispixel + 1];
+      unsigned char goal_g = goal_data[thispixel + 2];
+      unsigned char goal_b = goal_data[thispixel + 3];
+
+      if(MAX_FITNESS == -1)
+	my_max_fitness += goal_a + goal_r + goal_g + goal_b;
+
+      difference += ABS(((unsigned char) pixel[0]) - goal_a);
+      difference += ABS(((unsigned char) pixel[1]) - goal_r);
+      difference += ABS(((unsigned char) pixel[2]) - goal_g);
+      difference += ABS(((unsigned char) pixel[3]) - goal_b);      
+    }
+  }
+
+  if(MAX_FITNESS == -1)
+    MAX_FITNESS = my_max_fitness;
+  return difference;
+}
+
 int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf) {
   unsigned char * test_data = cairo_image_surface_get_data(test_surf);
   if(!goal_data)
     goal_data = cairo_image_surface_get_data(goal_surf);
 
   int difference = 0;
-
   int my_max_fitness = 0;
 
   for(int y = 0; y < HEIGHT; y++) {
@@ -440,7 +531,7 @@ void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
   cairo_paint(cr);
 }
 
-uint64_t mutate_time=0, color_time=0, loop_time=0;
+uint64_t show_time=0, test_time=0, mutate_time=0, color_time=0, loop_time=0;
 static void mainloop(cairo_surface_t * pngsurf)
 {
   struct timeval start;
@@ -463,10 +554,6 @@ static void mainloop(cairo_surface_t * pngsurf)
   copy_surf_to(pngsurf, goalcr);
 
   for(;;) {
-    if(t1 != 0) {
-      MENES_RDTSC(t2);
-      loop_time += t2 - t1;
-    }
     MENES_RDTSC(t1);
     //    if((teststep != 0) && (teststep % 1000 == 0))
     //      pull_colour(goalsurf, 100);
@@ -474,15 +561,20 @@ static void mainloop(cairo_surface_t * pngsurf)
     {
       mutate();
       MENES_RDTSC(t2);
-      pull_colour(goalsurf, 1);
+      //pull_colour(goalsurf, 1);
       MENES_RDTSC(t3);
       mutate_time += t2 - t1;
       color_time += t3 - t2;
     }
 
     draw_dna(dna_test, test_cr);
-
     int diff = difference(test_surf, goalsurf);
+
+    MENES_RDTSC(t2); test_time += t2 - t1;
+
+//    int diff2 = dist(goalsurf);
+//    std::cout << "diff: " << diff << "\tdiff2: " << diff2 << std::endl;
+
     if(diff < lowestdiff) {         // test is good, copy to best
       beststep++;
       for(int i=0; i!=NUM_SHAPES; ++i)
@@ -511,8 +603,9 @@ static void mainloop(cairo_surface_t * pngsurf)
       std::cout << "Mutate time: " << mutate_time << std::endl;
       std::cout << "Color time: " << color_time << std::endl;
       std::cout << "Pit time: " << pit_time << std::endl;
+      std::cout << "__Test time: " << test_time << std::endl;
       std::cout << "Loop time: " << loop_time << std::endl << std::endl;
-      pit_time = 0; color_time = 0; mutate_time = 0; loop_time = 0;
+      test_time=0; pit_time = 0; color_time = 0; mutate_time = 0; loop_time = 0;
     }
 
 #ifdef SHOWWINDOW
@@ -529,6 +622,7 @@ static void mainloop(cairo_surface_t * pngsurf)
     }
 #endif
 
+    MENES_RDTSC(t2); loop_time += t2 - t1;
   }
 }
 
@@ -537,9 +631,9 @@ int main(int argc, char ** argv) {
 
   cairo_surface_t * pngsurf;
   if(argc == 1)
-    //pngsurf = cairo_image_surface_create_from_png("mona.png");
+    pngsurf = cairo_image_surface_create_from_png("mona.png");
     //    pngsurf = cairo_image_surface_create_from_png("me.png");
-    pngsurf = cairo_image_surface_create_from_png("lena_crop.png");
+    //pngsurf = cairo_image_surface_create_from_png("jay2.png");
   else
     pngsurf = cairo_image_surface_create_from_png(argv[1]);
 
