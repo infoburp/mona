@@ -145,7 +145,7 @@ void dump_best() {
   f.open("best.svg");
   f << "<svg xmlns=\"http://www.w3.org/2000/svg\">";
   for(size_t i=0; i!=NUM_SHAPES; ++i) {
-    f << "<polygon fill=\"rgb(" << dna_best[i].r << ", " << dna_best[i].g << ", " << dna_best[i].b << ")\" opacity=\"" << dna_best[i].a << "\" points=\"";
+    f << "<polygon fill=\"rgb(" << (int)dna_best[i].r << ", " << (int)dna_best[i].g << ", " << (int)dna_best[i].b << ")\" opacity=\"" << dna_best[i].a << "\" points=\"";
     for(size_t j=0; j!=NUM_POINTS; ++j)
       f << dna_best[i].points[j].x << " " << dna_best[i].points[j].y << " ";
     f << "\" />";
@@ -193,14 +193,10 @@ void init_dna(shape_t * dna)
   }
 }
 
-int lowestdiff = INT_MAX;
-int highestdiff = INT_MAX;
+uint64_t lowestdiff = INT_MAX;
+uint64_t highestdiff = INT_MAX;
 int teststep = 0;
 int beststep = 0;
-
-int fitness() {
-  return lowestdiff;
-}
 
 void mutate() {
   // psydo simulated annealing ->
@@ -436,48 +432,72 @@ void pull_colour(cairo_surface_t * goal_surf, size_t max_terations) {
 }
 
 
-int dist(cairo_surface_t * goal_surf) {
+uint64_t pull_and_dist(cairo_surface_t * goal_surf) {
   if(!goal_data)
     goal_data = cairo_image_surface_get_data(goal_surf);
 
-  int difference = 0;
+  /*
+  unsigned char *flattened_below = alloca(sizeof(char) * HEIGHT * WIDTH * 4);
+  unsigned char *flattened_above = alloca(sizeof(char) * HEIGHT * WIDTH * 4);
+  for(size_t i=0; i!=(sizeof(char) * HEIGHT * WIDTH * 4); ++i)
+    flattened_below[i] = 0;
+  for(size_t i=0; i!=NUM_SHAPES; ++i) {
+    for(size_t j=0; j!=(sizeof(char) * HEIGHT * WIDTH * 4); ++j)
+      flattened_above[i] = 0;
+    for(size_t j=j; j!=NUM_SHAPES; ++j) {
+      for(size_t y=0; y!=HEIGHT; ++y) {
+	for(size_t x=0; x!=WIDTH; ++x) {
+	  size_t pix_offset = y*WIDTH*4 + x*4;
+	  double opacity = cached[j][pix_offset];
+	  double inv_opacity = 1.0 - cached[j][pix_offset];
+	  flattened_above[pix_offset] = cached[j][pix_offset];
+	  flattened_above[pix_offset + 1] *= inv_opacity;
+	  flattened_above[pix_offset + 1] += opacity * cached[j][pix_offset + 1];
+	  flattened_above[pix_offset + 2] *= inv_opacity;
+	  flattened_above[pix_offset + 2] += mult * cached[j][pix_offset + 2];
+	  flattened_above[pix_offset + 3] *= inv_opacity;
+	  flattened_above[pix_offset + 3] += mult * cached[j][pix_offset + 3];
+	}
+      }
+    }
+    dna_test[i].r,g,b,a = modification;
+    dna_test[i].points[0..2].x,y = modification;
+    // cached[i] = cairo_render;
+    // update flattened_below
+  }
+  */
 
+  uint64_t difference = 0;
+
+  /*
   for(size_t y = 0; y < HEIGHT; y++) {
     for(size_t x = 0; x < WIDTH; x++) {
-      // render just this pixel...
-      double pixel[4] = {0.0, 0.0, 0.0, 0.0};
-      for(int j=0; j!=NUM_SHAPES; ++j) {
-	if(! point_in_triangle(j, x,y))
-	  continue;
-	for(int tj=0; tj!=4; ++tj)
-	  pixel[tj] *= (1.0 - dna_test[j].a);
-	pixel[0] += dna_test[j].a;
-	pixel[1] += dna_test[j].a * dna_test[j].r;
-	pixel[2] += dna_test[j].a * dna_test[j].g;
-	pixel[3] += dna_test[j].a * dna_test[j].b;
+      size_t pix_idx = y*WIDTH*4 + x*4;
+      for(size_t i=0; i!=4; ++i) {
+       	int delta = flattened_below[pix_idx + i] - goal_data[pix_idx + i];
+	difference += delta * delta;
       }
-
-      int pix_offset = y*WIDTH*4 + x*4;
-      for(int tj=0; tj!=4; ++tj)
-	difference += ABS(((unsigned char) pixel[tj]) - goal_data[pix_offset + tj]);
     }
   }
+  */
 
   return difference;
 }
 
-int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf) {
+uint64_t difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf) {
   if(!goal_data)
     goal_data = cairo_image_surface_get_data(goal_surf);
   unsigned char * test_data = cairo_image_surface_get_data(test_surf);
 
-  int difference = 0;
+  uint64_t difference = 0;
 
   for(size_t y = 0; y < HEIGHT; y++) {
     for(size_t x = 0; x < WIDTH; x++) {
       size_t pix_idx = y*WIDTH*4 + x*4;
-      for(size_t i=0; i!=4; ++i)
-	difference += ABS(test_data[pix_idx + i] - goal_data[pix_idx + i]);
+      for(size_t i=0; i!=4; ++i) {
+	int delta = test_data[pix_idx + i] - goal_data[pix_idx + i];
+	difference += delta * delta;
+      }
     }
   }
 
@@ -531,7 +551,7 @@ static void mainloop(cairo_surface_t * pngsurf)
     }
 
     draw_dna(dna_test, test_cr);
-    int diff = difference(test_surf, goalsurf);
+    uint64_t diff = difference(test_surf, goalsurf);
     if(highestdiff == INT_MAX)
       highestdiff = diff;
 
@@ -562,8 +582,10 @@ static void mainloop(cairo_surface_t * pngsurf)
     teststep++;
 
     if(teststep % 100 == 0) {
+      std::cout << "HEIGHT: " << HEIGHT << "    WIDTH: " << WIDTH << std::endl;
       std::cout << "Step = " << beststep << " / " << teststep << std::endl;
-      std::cout << "Fitness = " << fitness() << std::endl;
+      std::cout << "Fitness = " << lowestdiff << std::endl;
+      std::cout << "Per pixel accuracy = " << (1.0 - (lowestdiff / ((double)(255 << 8) * HEIGHT * WIDTH))) * 100 << std::endl;
       std::cout << "Mutate time: " << mutate_time << std::endl;
       std::cout << "Color time: " << color_time << std::endl;
       std::cout << "Pit time: " << pit_time << std::endl;
@@ -600,10 +622,10 @@ int main(int argc, char ** argv) {
   signal(SIGINT, handle_signal);
 
   cairo_surface_t * pngsurf;
-  if(argc == 1)
-    pngsurf = cairo_image_surface_create_from_png("mona.png");
-    //    pngsurf = cairo_image_surface_create_from_png("me.png");
-    //pngsurf = cairo_image_surface_create_from_png("jay2.png");
+  if(argc == 1) {
+    std::cout << "usage: ./mona <png name>" << std::endl;
+    exit(0);
+  }
   else
     pngsurf = cairo_image_surface_create_from_png(argv[1]);
 
