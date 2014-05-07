@@ -33,39 +33,30 @@ int HEIGHT;
 //////////////////////// X11 stuff ////////////////////////
 #ifdef SHOWWINDOW
 
-#include <X11/Xlib.h>
+#include "SDL.h"
 
-Display * dpy;
-int screen;
-Window win;
-GC gc;
-Pixmap pixmap;
+SDL_Window * win;
+SDL_Surface * screen;
 
 void x_init(void)
 {
-    if(!(dpy = XOpenDisplay(NULL)))
+    if(SDL_Init(SDL_INIT_VIDEO) != 0)
     {
-        fprintf(stderr, "Failed to open X display %s\n", XDisplayName(NULL));
+        fprintf(stderr, "ERR: %s\n", SDL_GetError());
         exit(1);
     }
+	win = SDL_CreateWindow("mona",
+			SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+			WIDTH, HEIGHT,
+			0);
 
-    screen = DefaultScreen(dpy);
+	if (win == NULL)
+	{
+        fprintf(stderr, "ERR: %s\n", SDL_GetError());
+        exit(1);
+	}
 
-    XSetWindowAttributes attr;
-    attr.background_pixmap = ParentRelative;
-    win = XCreateWindow(dpy, DefaultRootWindow(dpy), 0, 0,
-                   WIDTH, HEIGHT, 0,
-                   DefaultDepth(dpy, screen), CopyFromParent, DefaultVisual(dpy, screen),
-                   CWBackPixmap, &attr);
-
-    pixmap = XCreatePixmap(dpy, win, WIDTH, HEIGHT,
-            DefaultDepth(dpy, screen));
-
-    gc = XCreateGC(dpy, pixmap, 0, NULL);
-
-    XSelectInput(dpy, win, ExposureMask);
-
-    XMapWindow(dpy, win);
+	screen = SDL_GetWindowSurface(win);
 }
 #else
 void x_init(void)
@@ -121,10 +112,6 @@ void init_dna(shape_t * dna)
         dna[i].g = RANDDOUBLE(1);
         dna[i].b = RANDDOUBLE(1);
         dna[i].a = RANDDOUBLE(1);
-        //dna[i].r = 0.5;
-        //dna[i].g = 0.5;
-        //dna[i].b = 0.5;
-        //dna[i].a = 1;
     }
 }
 
@@ -133,7 +120,7 @@ int mutate(void)
     mutated_shape = RANDINT(NUM_SHAPES);
     double roulette = RANDDOUBLE(2.8);
     double drastic = RANDDOUBLE(2);
-     
+
     // mutate color
     if(roulette<1)
     {
@@ -179,7 +166,7 @@ int mutate(void)
                 dna_test[mutated_shape].b = RANDDOUBLE(1.0);
         }
     }
-    
+
     // mutate shape
     else if(roulette < 2.0)
     {
@@ -283,9 +270,13 @@ static void mainloop(cairo_surface_t * pngsurf)
     memcpy((void *)dna_test, (const void *)dna_best, sizeof(shape_t) * NUM_SHAPES);
 
 #ifdef SHOWWINDOW
-    cairo_surface_t * xsurf = cairo_xlib_surface_create(
-            dpy, pixmap, DefaultVisual(dpy, screen), WIDTH, HEIGHT);
-    cairo_t * xcr = cairo_create(xsurf);
+	cairo_surface_t * xsurf = cairo_image_surface_create_for_data (
+		screen->pixels,
+		CAIRO_FORMAT_RGB24,
+		WIDTH, HEIGHT,
+		screen->pitch);
+
+	cairo_t * xcr = cairo_create(xsurf);
 #endif
 
     cairo_surface_t * test_surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT);
@@ -312,10 +303,7 @@ static void mainloop(cairo_surface_t * pngsurf)
                 dna_best[other_mutated] = dna_test[other_mutated];
 #ifdef SHOWWINDOW
             copy_surf_to(test_surf, xcr); // also copy to display
-            XCopyArea(dpy, pixmap, win, gc,
-                    0, 0,
-                    WIDTH, HEIGHT,
-                    0, 0);
+			SDL_UpdateWindowSurface(win);
 #endif
             lowestdiff = diff;
         }
@@ -351,6 +339,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 #endif
 
 #ifdef SHOWWINDOW
+		/*
         if(teststep % 100 == 0 && XPending(dpy))
         {
             XEvent xev;
@@ -363,6 +352,14 @@ static void mainloop(cairo_surface_t * pngsurf)
                             xev.xexpose.x, xev.xexpose.y);
             }
         }
+		*/
+		SDL_Event event;
+      while (SDL_PollEvent(&event)) {
+		  // printf("Event type: %d\n", event.type);
+		  if (event.type == SDL_QUIT || event.type == SDL_WINDOWEVENT_CLOSE) {
+			  exit(0);
+		  }
+	  }
 #endif
     }
 }
