@@ -31,8 +31,6 @@ int WIDTH;
 int HEIGHT;
 
 //////////////////////// X11 stuff ////////////////////////
-#ifdef SHOWWINDOW
-
 #include <X11/Xlib.h>
 
 Display * dpy;
@@ -67,7 +65,6 @@ void x_init(void)
 
     XMapWindow(dpy, win);
 }
-#endif
 //////////////////////// end X11 stuff ////////////////////////
 
 typedef struct {
@@ -278,11 +275,9 @@ static void mainloop(cairo_surface_t * pngsurf)
     init_dna(dna_best);
     memcpy((void *)dna_test, (const void *)dna_best, sizeof(shape_t) * NUM_SHAPES);
 
-#ifdef SHOWWINDOW
     cairo_surface_t * xsurf = cairo_xlib_surface_create(
             dpy, pixmap, DefaultVisual(dpy, screen), WIDTH, HEIGHT);
     cairo_t * xcr = cairo_create(xsurf);
-#endif
 
     cairo_surface_t * test_surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT);
     cairo_t * test_cr = cairo_create(test_surf);
@@ -306,13 +301,11 @@ static void mainloop(cairo_surface_t * pngsurf)
             dna_best[mutated_shape] = dna_test[mutated_shape];
             if(other_mutated >= 0)
                 dna_best[other_mutated] = dna_test[other_mutated];
-#ifdef SHOWWINDOW
             copy_surf_to(test_surf, xcr); // also copy to display
             XCopyArea(dpy, pixmap, win, gc,
                     0, 0,
                     WIDTH, HEIGHT,
                     0, 0);
-#endif
             lowestdiff = diff;
         }
         else
@@ -346,7 +339,6 @@ static void mainloop(cairo_surface_t * pngsurf)
                     beststep, teststep, ((MAX_FITNESS-lowestdiff) / (float)MAX_FITNESS)*100);
 #endif
 
-#ifdef SHOWWINDOW
         if(teststep % 100 == 0 && XPending(dpy))
         {
             XEvent xev;
@@ -359,7 +351,6 @@ static void mainloop(cairo_surface_t * pngsurf)
                             xev.xexpose.x, xev.xexpose.y);
             }
         }
-#endif
     }
 }
 
