@@ -67,6 +67,10 @@ void x_init(void)
 
     XMapWindow(dpy, win);
 }
+#else
+void x_init(void)
+{
+}
 #endif
 //////////////////////// end X11 stuff ////////////////////////
 
