@@ -1,13 +1,5 @@
 // written by nick welch <nick@incise.org>.  author disclaims copyright.
 
-#ifndef NUM_POINTS
-#define NUM_POINTS 6
-#endif
-
-#ifndef NUM_SHAPES
-#define NUM_SHAPES 40
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +10,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <getopt.h>
 
 #include <cairo.h>
 #include <cairo-xlib.h>
@@ -27,12 +20,16 @@
 #define ABS(val) ((val) < 0 ? -(val) : (val))
 #define CLAMP(val, min, max) ((val) < (min) ? (min) : (val) > (max) ? (max) : (val))
 
+#define MAX_POINTS 16
+
 int WIDTH;
 int HEIGHT;
 
 unsigned long TIMELIMIT = 0;
 bool SHOW_WINDOW = true;
 bool DUMP = false;
+int NUM_POINTS = 6;
+int NUM_SHAPES = 40;
 
 //////////////////////// X11 stuff ////////////////////////
 #ifdef WITH_SDL
@@ -75,11 +72,8 @@ typedef struct {
 
 typedef struct {
 	double r, g, b, a;
-	point_t points[NUM_POINTS];
+	point_t points[MAX_POINTS];
 } shape_t;
-
-shape_t dna_best[NUM_SHAPES];
-shape_t dna_test[NUM_SHAPES];
 
 int mutated_shape;
 
@@ -117,7 +111,7 @@ void init_dna(shape_t * dna)
 	}
 }
 
-int mutate(void)
+int mutate(shape_t* dna_test)
 {
 	mutated_shape = RANDINT(NUM_SHAPES);
 	double roulette = RANDDOUBLE(2.8);
@@ -249,6 +243,9 @@ void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
 static void mainloop(cairo_surface_t * pngsurf)
 {
 
+	shape_t dna_best[NUM_SHAPES];
+	shape_t dna_test[NUM_SHAPES];
+
 	struct timeval start;
 	gettimeofday(&start, NULL);
 
@@ -282,7 +279,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 	int teststep = 0;
 	int beststep = 0;
 	for (;;) {
-		int other_mutated = mutate();
+		int other_mutated = mutate(dna_test);
 		draw_dna(dna_test, test_cr);
 
 		int diff = difference(test_surf, goalsurf);
@@ -356,6 +353,9 @@ void print_help(const char *program)
 "             Images will continue to be generated in the background.\n"
 " -t TIME   Sets a time limit in seconds. Program will terminate afterward.\n"
 " -o FILE   Outputs most fit image at the end of the time limit, named FILE.\n"
+" -s NUM    The generated images will be made up of NUM polygons\n"
+" -p NUM    The polygons making up the image will have NUM vertices.\n"
+"             Three or more, up to 16.\n"
 " -h        Displays this help and exits.\n"
 	, program);
 }
@@ -367,7 +367,7 @@ int main(int argc, char **argv)
 	char* timestr = NULL;
 	char c;
 
-	while ((c = getopt(argc, argv, "ntoh")) != -1) {
+	while ((c = getopt(argc, argv, "ntopsh")) != -1) {
 		switch (c) {
 			case 'o':
 				DUMP = true;
@@ -380,9 +380,19 @@ int main(int argc, char **argv)
 					fprintf(stderr, "Not a valid time: '%s'\n", timestr);
 					return 1;
 				}
+				fprintf(stderr, "Running for %lu seconds.\n", TIMELIMIT);
 				break;
 			case 'n':
 				SHOW_WINDOW = false;
+				break;
+			/* FIXME: proper error checking for the next two opts */
+			case 's':
+				NUM_SHAPES = strtol(argv[optind++], NULL, 10);
+				fprintf(stderr, "Images will have %d shapes.\n", NUM_SHAPES);
+				break;
+			case 'p':
+				NUM_POINTS = strtol(argv[optind++], NULL, 10);
+				fprintf(stderr, "Shapes will have %d points.\n", NUM_POINTS);
 				break;
 			case 'h':
 				print_help(argv[0]);
@@ -391,6 +401,7 @@ int main(int argc, char **argv)
 				abort();
 		}
 	}
+	fprintf(stderr, "\n\n");
 
 	if (argc - optind == 1) {
 		input_name = argv[optind];
