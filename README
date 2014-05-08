@@ -2,31 +2,18 @@ reddit mona lisa meme thing in c.
 
 written by nick welch <nick@incise.org>.  author disclaims copyright.
 
-build requirements (ubuntu/debian package names):
+dependencies (for debian-based systems):
+	
+	apt-get install build-essential pkgconfig libcairo2-dev libsdl2-dev
 
-    pkg-config
-    libx11-dev
-    libcairo2
-    libcairo2-dev
-    libglib2.0-0
-    libglib2.0-dev
-
-and of course g++ and make (build-essential package should cover it)
-
+As far as I know, those things run just about everywhere, so porting to
+OSX/Windows should just be a matter of installing those things and running the
+makefile.
 to run:
 
     make
-    ./mona
+    ./mona -h for options
     Control-C in terminal to quit
-
-the path to the mona.png image is hardcoded in the source code, so without
-tweaking that, you must run it from same directory.
-
-feel free to modify the NUM_POINTS and NUM_SHAPES #defines to play around with
-different variations.  to run it against another image, change "mona.png" to
-"whatever.png" in the code (or merely copy your image over mona.png) (it must
-be a png), and modify the WIDTH and HEIGHT #defines accordingly.  text can
-produce some cool looking results.
 
 WARNING to those who might scrutinize the code:
 
