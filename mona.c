@@ -1,13 +1,5 @@
 // written by nick welch <nick@incise.org>.  author disclaims copyright.
 
-#ifndef NUM_POINTS
-#define NUM_POINTS 6
-#endif
-
-#ifndef NUM_SHAPES
-#define NUM_SHAPES 40
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +21,9 @@
 
 int WIDTH;
 int HEIGHT;
+
+int SHAPES = 40;
+int POINTS = 6;
 
 //////////////////////// X11 stuff ////////////////////////
 #include <X11/Xlib.h>
@@ -73,11 +68,11 @@ typedef struct {
 
 typedef struct {
     double r, g, b, a;
-    point_t points[NUM_POINTS];
+    point_t* points;
 } shape_t;
 
-shape_t dna_best[NUM_SHAPES];
-shape_t dna_test[NUM_SHAPES];
+shape_t* dna_best = 0;
+shape_t* dna_test = 0;
 
 int mutated_shape;
 
@@ -87,7 +82,7 @@ void draw_shape(shape_t * dna, cairo_t * cr, int i)
     shape_t * shape = &dna[i];
     cairo_set_source_rgba(cr, shape->r, shape->g, shape->b, shape->a);
     cairo_move_to(cr, shape->points[0].x, shape->points[0].y);
-    for(int j = 1; j < NUM_POINTS; j++)
+    for(int j = 1; j < POINTS; j++)
         cairo_line_to(cr, shape->points[j].x, shape->points[j].y);
     cairo_fill(cr);
 }
@@ -97,15 +92,17 @@ void draw_dna(shape_t * dna, cairo_t * cr)
     cairo_set_source_rgb(cr, 1, 1, 1);
     cairo_rectangle(cr, 0, 0, WIDTH, HEIGHT);
     cairo_fill(cr);
-    for(int i = 0; i < NUM_SHAPES; i++)
+    for(int i = 0; i < SHAPES; i++)
         draw_shape(dna, cr, i);
 }
 
-void init_dna(shape_t * dna)
+shape_t* init_dna()
 {
-    for(int i = 0; i < NUM_SHAPES; i++)
+    shape_t* dna = malloc(SHAPES * sizeof(shape_t));
+    for(int i = 0; i < SHAPES; i++)
     {
-        for(int j = 0; j < NUM_POINTS; j++)
+        dna[i].points = malloc(POINTS * sizeof(point_t));
+	for(int j = 0; j < POINTS; j++)
         {
             dna[i].points[j].x = RANDDOUBLE(WIDTH);
             dna[i].points[j].y = RANDDOUBLE(HEIGHT);
@@ -119,11 +116,12 @@ void init_dna(shape_t * dna)
         //dna[i].b = 0.5;
         //dna[i].a = 1;
     }
+    return dna;
 }
 
 int mutate(void)
 {
-    mutated_shape = RANDINT(NUM_SHAPES);
+    mutated_shape = RANDINT(SHAPES);
     double roulette = RANDDOUBLE(2.8);
     double drastic = RANDDOUBLE(2);
      
@@ -176,7 +174,7 @@ int mutate(void)
     // mutate shape
     else if(roulette < 2.0)
     {
-        int point_i = RANDINT(NUM_POINTS);
+        int point_i = RANDINT(POINTS);
         if(roulette<1.5)
         {
             if(drastic < 1)
@@ -202,7 +200,7 @@ int mutate(void)
     // mutate stacking
     else
     {
-        int destination = RANDINT(NUM_SHAPES);
+        int destination = RANDINT(SHAPES);
         shape_t s = dna_test[mutated_shape];
         dna_test[mutated_shape] = dna_test[destination];
         dna_test[destination] = s;
@@ -267,13 +265,28 @@ void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
     cairo_paint(cr);
 }
 
+void copy_shape(shape_t* src, shape_t* dst, int index)
+{
+    dst[index].r = src[index].r;
+    dst[index].g = src[index].g;
+    dst[index].b = src[index].b;
+    dst[index].a = src[index].a;
+    for (int j = 0; j < POINTS; j++)
+    {
+        dst[index].points[j].x = src[index].points[j].x;
+        dst[index].points[j].y = src[index].points[j].y;
+    }
+}
 static void mainloop(cairo_surface_t * pngsurf)
 {
     struct timeval start;
     gettimeofday(&start, NULL);
 
-    init_dna(dna_best);
-    memcpy((void *)dna_test, (const void *)dna_best, sizeof(shape_t) * NUM_SHAPES);
+    dna_best = init_dna();
+    dna_test = init_dna();
+    /* copy dna_best to dna_test */
+    for (int i = 0; i < SHAPES; i++)
+        copy_shape(dna_best, dna_test, i); 
 
     cairo_surface_t * xsurf = cairo_xlib_surface_create(
             dpy, pixmap, DefaultVisual(dpy, screen), WIDTH, HEIGHT);
@@ -298,9 +311,9 @@ static void mainloop(cairo_surface_t * pngsurf)
         {
             beststep++;
             // test is good, copy to best
-            dna_best[mutated_shape] = dna_test[mutated_shape];
+            copy_shape(dna_test, dna_best, mutated_shape);
             if(other_mutated >= 0)
-                dna_best[other_mutated] = dna_test[other_mutated];
+                copy_shape(dna_test, dna_best, other_mutated);
             copy_surf_to(test_surf, xcr); // also copy to display
             XCopyArea(dpy, pixmap, win, gc,
                     0, 0,
@@ -311,9 +324,9 @@ static void mainloop(cairo_surface_t * pngsurf)
         else
         {
             // test sucks, copy best back over test
-            dna_test[mutated_shape] = dna_best[mutated_shape];
+            copy_shape(dna_best, dna_test, mutated_shape);
             if(other_mutated >= 0)
-                dna_test[other_mutated] = dna_best[other_mutated];
+                copy_shape(dna_best, dna_test, other_mutated);
         }
 
         teststep++;
@@ -328,7 +341,7 @@ static void mainloop(cairo_surface_t * pngsurf)
             char filename[50];
             sprintf(filename, "%d.data", getpid());
             FILE * f = fopen(filename, "w");
-            fwrite(dna_best, sizeof(shape_t), NUM_SHAPES, f);
+            fwrite(dna_best, sizeof(shape_t), SHAPES, f);
             fclose(f);
 #endif
             return;
@@ -354,16 +367,54 @@ static void mainloop(cairo_surface_t * pngsurf)
     }
 }
 
+void parse_sizearg(int* poly, int* point, char* arg)
+{
+    char seperator = 'x';
+    *poly = *point = 0;
+    char* ptr = arg;
+    while(*ptr != seperator)
+    {
+        if (*ptr >= '0' && *ptr <= '9')
+            *poly = (*poly * 10) + (*ptr) - 48;
+        ptr++;
+    }
+    ptr++; /* increment past seperator */
+    while(*ptr != '\0')
+    {
+        if (*ptr >= '0' && *ptr <= '9')
+            *point = (*point * 10) + (*ptr) - 48;
+        ptr++;
+    }
+}
+
 int main(int argc, char ** argv) {
+    /* parse command line arguments */
+    char* sizearg = 0;
+    int c;
+    while ( (c = getopt(argc, argv, "s:")) != -1)
+    {
+        switch(c)
+        {
+        case 's':
+            parse_sizearg(&SHAPES, &POINTS, optarg);
+            printf("poly = %d, point = %d\n", SHAPES, POINTS);
+            break;
+        default:
+            printf("unknown option %c", (char)c);
+            break;
+        }
+    }
+    /* load image from png*/
     cairo_surface_t * pngsurf;
-    if(argc == 1)
+    if(argv[optind] == NULL)
         pngsurf = cairo_image_surface_create_from_png("mona.png");
     else
-        pngsurf = cairo_image_surface_create_from_png(argv[1]);
+        pngsurf = cairo_image_surface_create_from_png(argv[optind]);
 
     WIDTH = cairo_image_surface_get_width(pngsurf);
     HEIGHT = cairo_image_surface_get_height(pngsurf);
 
+    /* start main loop  */
     srandom(getpid() + time(NULL));
     x_init();
     mainloop(pngsurf);
