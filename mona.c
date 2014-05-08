@@ -13,7 +13,6 @@
 #include <getopt.h>
 
 #include <cairo.h>
-#include <cairo-xlib.h>
 
 #define RANDINT(max) (int)((random() / (double)RAND_MAX) * (max))
 #define RANDDOUBLE(max) ((random() / (double)RAND_MAX) * max)
