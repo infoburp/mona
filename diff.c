@@ -6,6 +6,15 @@ int MAX_FITNESS = -1;
 
 unsigned char *goal_data = NULL;
 
+int difference_init()
+{
+	return 0;
+}
+
+void difference_clean()
+{
+}
+
 int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
 {
 	unsigned char *test_data = cairo_image_surface_get_data(test_surf);

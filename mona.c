@@ -9,6 +9,7 @@
 
 #include <cairo.h>
 #include "mona.h"
+#include "diff.h"
 
 #define MAX_POINTS 16
 
@@ -29,14 +30,14 @@ int NUM_SHAPES = 40;
 SDL_Window *win;
 SDL_Surface *screen;
 
-void x_init(void)
+void x_init(const char* name)
 {
 	if (SHOW_WINDOW) {
 		if (SDL_Init(SDL_INIT_VIDEO) != 0) {
 			fprintf(stderr, "ERROR: %s\n", SDL_GetError());
 			exit(1);
 		}
-		win = SDL_CreateWindow("mona",
+		win = SDL_CreateWindow(name,
 				SDL_WINDOWPOS_UNDEFINED,
 				SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, 0);
 
@@ -177,9 +178,6 @@ int mutate(shape_t* dna_test)
 
 }
 
-int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf);
-int get_max_fitness(void);
-
 void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
 {
 	cairo_set_source_rgb(cr, 1, 1, 1);
@@ -233,6 +231,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 	}
 #endif
 
+	difference_init();
 	init_dna(dna_best);
 	memcpy((void *) dna_test, (const void *) dna_best,
 			sizeof(shape_t) * NUM_SHAPES);
@@ -307,6 +306,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 	}
 
 cleanup:
+	difference_clean();
 	if (DUMP) {
 		write_img(test_surf);
 		write_dna(dna_best);
@@ -329,6 +329,7 @@ void print_help(const char *program)
 " -s NUM    The generated images will be made up of NUM polygons\n"
 " -p NUM    The polygons making up the image will have NUM vertices.\n"
 "             Three or more, up to 16.\n"
+" -r NUM    Sets the seed for the random number generator to NUM. base-10 only.\n"
 " -h        Displays this help and exits.\n"
 	, program);
 }
@@ -349,12 +350,14 @@ void print_config(const char* input)
 int main(int argc, char **argv)
 {
 	cairo_surface_t *pngsurf;
+	const char* program_name = argv[0];
 	char* input_name = "mona.png";
 	char* timestr = NULL;
+	long seed = getpid() + time(NULL);
 	char c;
 
 	/* FIXME do proper error checking on the arguments */
-	while ((c = getopt(argc, argv, "ntopsh")) != -1) {
+	while ((c = getopt(argc, argv, "ntopsrh")) != -1) {
 		switch (c) {
 			case 'o':
 				DUMP = true;
@@ -377,8 +380,11 @@ int main(int argc, char **argv)
 			case 'p':
 				NUM_POINTS = strtol(argv[optind++], NULL, 10);
 				break;
+			case 'r':
+				seed = strtol(argv[optind++], NULL, 10);
+				break;
 			case 'h':
-				print_help(argv[0]);
+				print_help(program_name);
 				return 0;
 			default:
 				fprintf(stderr, "ERROR: unrecognized argument");
@@ -402,7 +408,7 @@ int main(int argc, char **argv)
 	WIDTH = cairo_image_surface_get_width(pngsurf);
 	HEIGHT = cairo_image_surface_get_height(pngsurf);
 
-	srand(getpid() + time(NULL));
-	x_init();
+	srand(seed);
+	x_init(program_name);
 	mainloop(pngsurf);
 }
