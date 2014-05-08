@@ -30,9 +30,9 @@
 int WIDTH;
 int HEIGHT;
 
+unsigned long TIMELIMIT = 0;
 bool SHOW_WINDOW = true;
-bool timelimit = false;
-bool dump = false;
+bool DUMP = false;
 
 //////////////////////// X11 stuff ////////////////////////
 #ifdef WITH_SDL
@@ -308,35 +308,33 @@ static void mainloop(cairo_surface_t * pngsurf)
 
 		teststep++;
 
-#ifdef TIMELIMIT
-		struct timeval t;
-		gettimeofday(&t, NULL);
-		if (t.tv_sec - start.tv_sec > TIMELIMIT) {
-			printf("%0.6f\n",
-					((MAX_FITNESS -
-					  lowestdiff) / (float) MAX_FITNESS) * 100);
-#ifdef DUMP
-			char filename[50];
-			sprintf(filename, "%d.data", getpid());
-			FILE *f = fopen(filename, "w");
-			fwrite(dna_best, sizeof(shape_t), NUM_SHAPES, f);
-			fclose(f);
-#endif
-			return;
-		}
-#else
-		if (teststep % 100 == 0)
+		if (TIMELIMIT != 0) {
+			struct timeval t;
+			gettimeofday(&t, NULL);
+			if (t.tv_sec - start.tv_sec > TIMELIMIT) {
+				printf("%0.6f\n",
+						((MAX_FITNESS -
+						  lowestdiff) / (float) MAX_FITNESS) * 100);
+				if (DUMP) {
+					char filename[50];
+					sprintf(filename, "%d.data", getpid());
+					FILE *f = fopen(filename, "w");
+					fwrite(dna_best, sizeof(shape_t), NUM_SHAPES, f);
+					fclose(f);
+				}
+				return;
+			}
+		} else if (teststep % 100 == 0) {
 			printf("Step = %d/%d\nFitness = %0.6f%%\n",
 					beststep, teststep,
 					((MAX_FITNESS -
 					  lowestdiff) / (float) MAX_FITNESS) * 100);
-#endif
+		}
 
 #ifdef WITH_SDL
 		if (SHOW_WINDOW) {
 			SDL_Event event;
 			while (SDL_PollEvent(&event)) {
-				// printf("Event type: %d\n", event.type);
 				if (event.type == SDL_QUIT
 						|| event.type == SDL_WINDOWEVENT_CLOSE) {
 					exit(0);
@@ -351,13 +349,13 @@ void print_help(const char *program)
 {
 	printf(
 "Usage: %s [OPTION]... [FILE]\n"
-"``Evolves'' an image out of triangles from a source image.\n"
-"  input images must be in the PNG format.\n"
+"Evolves an image out of triangles from a source image, using simmulated\n"
+"  annealing. Input images must be in the PNG format.\n"
 "\n"
-" -s        hides the intermediate view: images will continue to be\n"
-"             generated in the background.\n"
-//" -t TIME   Sets a time limit in seconds. Program will terminate afterward.\n"
-//" -d FILE   Dumps the resulting image to a PNG file named FILE.\n"
+" -n        hides the intermediate view, such that there is (N)o window.\n"
+"             Images will continue to be generated in the background.\n"
+" -t TIME   Sets a time limit in seconds. Program will terminate afterward.\n"
+" -o FILE   Outputs most fit image at the end of the time limit, named FILE.\n"
 " -h        Displays this help and exits.\n"
 	, program);
 }
@@ -365,18 +363,25 @@ void print_help(const char *program)
 int main(int argc, char **argv)
 {
 	cairo_surface_t *pngsurf;
-	char *input_name = "mona.png";
+	char* input_name = "mona.png";
+	char* timestr = NULL;
 	char c;
 
-	while ((c = getopt(argc, argv, "svtdh")) != -1) {
+	while ((c = getopt(argc, argv, "ntoh")) != -1) {
 		switch (c) {
-			case 'd':
-				dump = true;
+			case 'o':
+				DUMP = true;
+				fprintf(stderr, "Final output at '%s'\n", argv[optind++]);
 				break;
 			case 't':
-				timelimit = true;
+				timestr = argv[optind++];
+				TIMELIMIT = strtol(timestr, NULL, 10);
+				if (TIMELIMIT == 0) {
+					fprintf(stderr, "Not a valid time: '%s'\n", timestr);
+					return 1;
+				}
 				break;
-			case 's':
+			case 'n':
 				SHOW_WINDOW = false;
 				break;
 			case 'h':
@@ -392,6 +397,10 @@ int main(int argc, char **argv)
 	}
 
 	pngsurf = cairo_image_surface_create_from_png(input_name);
+	if (cairo_surface_status(pngsurf) != CAIRO_STATUS_SUCCESS) {
+		fprintf(stderr, "ERR: '%s' is not a valid png file (probably).\n", input_name);
+		return 1;
+	}
 
 	WIDTH = cairo_image_surface_get_width(pngsurf);
 	HEIGHT = cairo_image_surface_get_height(pngsurf);
