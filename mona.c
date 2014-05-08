@@ -335,8 +335,8 @@ static void mainloop(cairo_surface_t * pngsurf)
         }
 #else
         if(teststep % 100 == 0)
-            printf("Step = %d/%d\nFitness = %0.6f%%\n",
-                    beststep, teststep, ((MAX_FITNESS-lowestdiff) / (float)MAX_FITNESS)*100);
+            printf("Step:\t\t Improvement:%d Total:%d (%5.2f%%)\nResemblance:\t %0.6f%%\n",
+                    beststep, teststep,(((float)beststep)/((float)teststep))*100, ((MAX_FITNESS-lowestdiff) / (float)MAX_FITNESS)*100);
 #endif
 
         if(teststep % 100 == 0 && XPending(dpy))
