@@ -13,10 +13,9 @@
 #include <getopt.h>
 
 #include <cairo.h>
-#include <cairo-xlib.h>
 
-#define RANDINT(max) (int)((random() / (double)RAND_MAX) * (max))
-#define RANDDOUBLE(max) ((random() / (double)RAND_MAX) * max)
+#define RANDINT(max) (int)((rand() / (double)RAND_MAX) * (max))
+#define RANDDOUBLE(max) ((rand() / (double)RAND_MAX) * max)
 #define ABS(val) ((val) < 0 ? -(val) : (val))
 #define CLAMP(val, min, max) ((val) < (min) ? (min) : (val) > (max) ? (max) : (val))
 
@@ -416,7 +415,7 @@ int main(int argc, char **argv)
 	WIDTH = cairo_image_surface_get_width(pngsurf);
 	HEIGHT = cairo_image_surface_get_height(pngsurf);
 
-	srandom(getpid() + time(NULL));
+	srand(getpid() + time(NULL));
 	x_init();
 	mainloop(pngsurf);
 }
