@@ -27,6 +27,7 @@ int HEIGHT;
 unsigned long TIMELIMIT = 0;
 bool SHOW_WINDOW = true;
 bool DUMP = false;
+char* OUTPUT_FILENAME = "oops.png";
 int NUM_POINTS = 6;
 int NUM_SHAPES = 40;
 
@@ -42,7 +43,7 @@ void x_init(void)
 {
 	if (SHOW_WINDOW) {
 		if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-			fprintf(stderr, "ERR: %s\n", SDL_GetError());
+			fprintf(stderr, "ERROR: %s\n", SDL_GetError());
 			exit(1);
 		}
 		win = SDL_CreateWindow("mona",
@@ -50,7 +51,7 @@ void x_init(void)
 				SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, 0);
 
 		if (win == NULL) {
-			fprintf(stderr, "ERR: %s\n", SDL_GetError());
+			fprintf(stderr, "ERROR: %s\n", SDL_GetError());
 			exit(1);
 		}
 
@@ -234,9 +235,30 @@ void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
 	cairo_set_source_rgb(cr, 1, 1, 1);
 	cairo_rectangle(cr, 0, 0, WIDTH, HEIGHT);
 	cairo_fill(cr);
-	//cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
 	cairo_set_source_surface(cr, surf, 0, 0);
 	cairo_paint(cr);
+}
+
+void write_img(cairo_surface_t* final_surf)
+{
+	cairo_status_t err = cairo_surface_write_to_png(final_surf, OUTPUT_FILENAME);
+	if (err != CAIRO_STATUS_SUCCESS) {
+		fprintf(stderr, "Error writing image to disk: %s",
+				cairo_status_to_string(err));
+	}
+	fprintf(stderr, "Image succesfully saved as '%s'\n", OUTPUT_FILENAME);
+}
+
+/* TODO: copy the C# dna format */
+void write_dna(shape_t* dna)
+{
+		char fname[255]; // FIXME
+		strcpy(fname, OUTPUT_FILENAME);
+		strcat(fname, ".dna");
+
+		FILE *f = fopen(fname, "w");
+		fwrite(dna, sizeof(shape_t), NUM_SHAPES, f);
+		fclose(f);
 }
 
 static void mainloop(cairo_surface_t * pngsurf)
@@ -247,10 +269,6 @@ static void mainloop(cairo_surface_t * pngsurf)
 
 	struct timeval start;
 	gettimeofday(&start, NULL);
-
-	init_dna(dna_best);
-	memcpy((void *) dna_test, (const void *) dna_best,
-			sizeof(shape_t) * NUM_SHAPES);
 
 #ifdef WITH_SDL
 	cairo_surface_t *xsurf = NULL;
@@ -265,6 +283,11 @@ static void mainloop(cairo_surface_t * pngsurf)
 	}
 #endif
 
+	init_dna(dna_best);
+	memcpy((void *) dna_test, (const void *) dna_best,
+			sizeof(shape_t) * NUM_SHAPES);
+
+
 	cairo_surface_t *test_surf =
 		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT);
 	cairo_t *test_cr = cairo_create(test_surf);
@@ -278,6 +301,17 @@ static void mainloop(cairo_surface_t * pngsurf)
 	int teststep = 0;
 	int beststep = 0;
 	for (;;) {
+#ifdef WITH_SDL
+		if (SHOW_WINDOW) {
+			SDL_Event event;
+			while (SDL_PollEvent(&event)) {
+				if (event.type == SDL_QUIT
+						|| event.type == SDL_WINDOWEVENT_CLOSE) {
+					goto cleanup;
+				}
+			}
+		}
+#endif
 		int other_mutated = mutate(dna_test);
 		draw_dna(dna_test, test_cr);
 
@@ -303,6 +337,12 @@ static void mainloop(cairo_surface_t * pngsurf)
 		}
 
 		teststep++;
+		if (teststep % 100 == 0) {
+			printf("Step = %d/%d\nFitness = %0.6f%%\n",
+					beststep, teststep,
+					((MAX_FITNESS -
+					  lowestdiff) / (float) MAX_FITNESS) * 100);
+		}
 
 		if (TIMELIMIT != 0) {
 			struct timeval t;
@@ -311,35 +351,19 @@ static void mainloop(cairo_surface_t * pngsurf)
 				printf("%0.6f\n",
 						((MAX_FITNESS -
 						  lowestdiff) / (float) MAX_FITNESS) * 100);
-				if (DUMP) {
-					char filename[50];
-					sprintf(filename, "%d.data", getpid());
-					FILE *f = fopen(filename, "w");
-					fwrite(dna_best, sizeof(shape_t), NUM_SHAPES, f);
-					fclose(f);
-				}
-				return;
-			}
-		} else if (teststep % 100 == 0) {
-			printf("Step = %d/%d\nFitness = %0.6f%%\n",
-					beststep, teststep,
-					((MAX_FITNESS -
-					  lowestdiff) / (float) MAX_FITNESS) * 100);
-		}
-
-#ifdef WITH_SDL
-		if (SHOW_WINDOW) {
-			SDL_Event event;
-			while (SDL_PollEvent(&event)) {
-				if (event.type == SDL_QUIT
-						|| event.type == SDL_WINDOWEVENT_CLOSE) {
-					exit(0);
-				}
+				goto cleanup;
 			}
 		}
-#endif
 	}
+
+cleanup:
+	if (DUMP) {
+		write_img(test_surf);
+		write_dna(dna_best);
+	}
+	return;
 }
+
 
 void print_help(const char *program)
 {
@@ -359,6 +383,19 @@ void print_help(const char *program)
 	, program);
 }
 
+void print_config(const char* input)
+{
+	fprintf(stderr, "Input from %s\n", input);
+	if (DUMP)
+		fprintf(stderr, "Final output at '%s', dna at '%s.dna'\n",
+				OUTPUT_FILENAME, OUTPUT_FILENAME);
+
+	if (TIMELIMIT)
+		fprintf(stderr, "Running for %lu seconds.\n", TIMELIMIT);
+	fprintf(stderr, "Images will have %d shapes.\n", NUM_SHAPES);
+	fprintf(stderr, "Shapes will have %d points.\n", NUM_POINTS);
+}
+
 int main(int argc, char **argv)
 {
 	cairo_surface_t *pngsurf;
@@ -366,49 +403,49 @@ int main(int argc, char **argv)
 	char* timestr = NULL;
 	char c;
 
+	/* FIXME do proper error checking on the arguments */
 	while ((c = getopt(argc, argv, "ntopsh")) != -1) {
 		switch (c) {
 			case 'o':
 				DUMP = true;
-				fprintf(stderr, "Final output at '%s'\n", argv[optind++]);
+				OUTPUT_FILENAME = argv[optind++];
 				break;
 			case 't':
 				timestr = argv[optind++];
 				TIMELIMIT = strtol(timestr, NULL, 10);
 				if (TIMELIMIT == 0) {
-					fprintf(stderr, "Not a valid time: '%s'\n", timestr);
+					fprintf(stderr, "ERROR: Not a valid time: '%s'\n", timestr);
 					return 1;
 				}
-				fprintf(stderr, "Running for %lu seconds.\n", TIMELIMIT);
 				break;
 			case 'n':
 				SHOW_WINDOW = false;
 				break;
-			/* FIXME: proper error checking for the next two opts */
 			case 's':
 				NUM_SHAPES = strtol(argv[optind++], NULL, 10);
-				fprintf(stderr, "Images will have %d shapes.\n", NUM_SHAPES);
 				break;
 			case 'p':
 				NUM_POINTS = strtol(argv[optind++], NULL, 10);
-				fprintf(stderr, "Shapes will have %d points.\n", NUM_POINTS);
 				break;
 			case 'h':
 				print_help(argv[0]);
 				return 0;
 			default:
-				abort();
+				fprintf(stderr, "ERROR: unrecognized argument");
+				return 1;
 		}
 	}
-	fprintf(stderr, "\n\n");
 
 	if (argc - optind == 1) {
 		input_name = argv[optind];
 	}
 
+	print_config(input_name);
+
 	pngsurf = cairo_image_surface_create_from_png(input_name);
 	if (cairo_surface_status(pngsurf) != CAIRO_STATUS_SUCCESS) {
-		fprintf(stderr, "ERR: '%s' is not a valid png file (probably).\n", input_name);
+		fprintf(stderr, "ERROR: '%s' is not a valid png file (probably).\n",
+				input_name);
 		return 1;
 	}
 
