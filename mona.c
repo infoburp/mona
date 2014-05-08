@@ -27,6 +27,7 @@ int HEIGHT;
 unsigned long TIMELIMIT = 0;
 bool SHOW_WINDOW = true;
 bool DUMP = false;
+int REPEAT = 0;
 char* OUTPUT_FILENAME = "oops.png";
 int NUM_POINTS = 6;
 int NUM_SHAPES = 40;
@@ -239,6 +240,18 @@ void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
 	cairo_paint(cr);
 }
 
+void write_timelapse_img(cairo_surface_t* final_surf, int frame)
+{
+	char fname[255];
+	snprintf(fname, 255, "%.4d%s", frame, OUTPUT_FILENAME);
+	cairo_status_t err = cairo_surface_write_to_png(final_surf, fname);
+	if (err != CAIRO_STATUS_SUCCESS) {
+		fprintf(stderr, "Error writing image to disk: %s",
+				cairo_status_to_string(err));
+	}
+	fprintf(stderr, "Image succesfully saved as '%s'\n", fname);
+}
+
 void write_img(cairo_surface_t* final_surf)
 {
 	cairo_status_t err = cairo_surface_write_to_png(final_surf, OUTPUT_FILENAME);
@@ -299,6 +312,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 
 	int lowestdiff = INT_MAX;
 	int teststep = 0;
+	int lapses   = 0;
 	int beststep = 0;
 	for (;;) {
 #ifdef WITH_SDL
@@ -344,6 +358,12 @@ static void mainloop(cairo_surface_t * pngsurf)
 					  lowestdiff) / (float) MAX_FITNESS) * 100);
 		}
 
+		if (REPEAT != 0 && beststep % REPEAT == 0) {
+			write_timelapse_img(test_surf, lapses);
+			lapses++;
+		}
+
+
 		if (TIMELIMIT != 0) {
 			struct timeval t;
 			gettimeofday(&t, NULL);
@@ -375,6 +395,7 @@ void print_help(const char *program)
 " -n        hides the intermediate view, such that there is (N)o window.\n"
 "             Images will continue to be generated in the background.\n"
 " -t TIME   Sets a time limit in seconds. Program will terminate afterward.\n"
+" -r ITER   Timelapse mode: will dump intermediate images every ITER iterations.\n"
 " -o FILE   Outputs most fit image at the end of the time limit, named FILE.\n"
 " -s NUM    The generated images will be made up of NUM polygons\n"
 " -p NUM    The polygons making up the image will have NUM vertices.\n"
@@ -404,7 +425,7 @@ int main(int argc, char **argv)
 	char c;
 
 	/* FIXME do proper error checking on the arguments */
-	while ((c = getopt(argc, argv, "ntopsh")) != -1) {
+	while ((c = getopt(argc, argv, "rntopsh")) != -1) {
 		switch (c) {
 			case 'o':
 				DUMP = true;
@@ -421,6 +442,9 @@ int main(int argc, char **argv)
 			case 'n':
 				SHOW_WINDOW = false;
 				break;
+			case 'r':
+				REPEAT = strtol(argv[optind++], NULL, 10);
+				break;
 			case 's':
 				NUM_SHAPES = strtol(argv[optind++], NULL, 10);
 				break;
@@ -431,7 +455,7 @@ int main(int argc, char **argv)
 				print_help(argv[0]);
 				return 0;
 			default:
-				fprintf(stderr, "ERROR: unrecognized argument");
+				fprintf(stderr, "ERROR: unrecognized argument\n");
 				return 1;
 		}
 	}
