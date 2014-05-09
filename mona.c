@@ -1,7 +1,5 @@
 // written by nick welch <nick@incise.org>.  author disclaims copyright.
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <time.h>
@@ -9,9 +7,14 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <limits.h>
+#include <signal.h>
 
 #include <cairo.h>
 #include <cairo-xlib.h>
+
+#include "mona.h"
+#include "cJSON.h"
+#include "save.h"
 
 #define RANDINT(max) (int)((random() / (double)RAND_MAX) * (max))
 #define RANDDOUBLE(max) ((random() / (double)RAND_MAX) * max)
@@ -19,12 +22,9 @@
 #define CLAMP(val, min, max) ((val) < (min) ? (min) : \
                               (val) > (max) ? (max) : (val))
 
-int WIDTH;
-int HEIGHT;
-
-int SHAPES = 40;
+int WIDTH, HEIGHT;
 int POINTS = 6;
-
+int SHAPES = 40;
 //////////////////////// X11 stuff ////////////////////////
 #include <X11/Xlib.h>
 
@@ -58,19 +58,12 @@ void x_init(void)
 }
 //////////////////////// end X11 stuff ////////////////////////
 
-typedef struct {
-    double x, y;
-} point_t;
-
-typedef struct {
-    double r, g, b, a;
-    point_t* points;
-} shape_t;
-
 shape_t* dna_best = 0;
 shape_t* dna_test = 0;
 
 int mutated_shape;
+
+
 
 void draw_shape(shape_t * dna, cairo_t * cr, int i)
 {
