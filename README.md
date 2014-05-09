@@ -22,7 +22,7 @@ To actually compile:
 
 	make
 
-That's it. you can use CUDA=yes to cuda, NOSDL=yes to only require cairo.
+That's it. you can use WITH_CUDA=yes to cuda, WITH_SDL=no to only require cairo.
 
 USE
 ===
