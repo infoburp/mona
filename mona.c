@@ -387,6 +387,11 @@ void parse_sizearg(int* poly, int* point, char* arg)
     }
 }
 
+void usage()
+{
+    printf("Usage:\n\tmona [OPTIONS] [PNG FILE]\n\nOptions:\n\t-s [ShapeNum]x[PointNum]\t Changes the number of shapes and points\n");
+}
+
 int main(int argc, char ** argv) {
     /* parse command line arguments */
     char* sizearg = 0;
@@ -407,16 +412,18 @@ int main(int argc, char ** argv) {
     /* load image from png*/
     cairo_surface_t * pngsurf;
     if(argv[optind] == NULL)
-        pngsurf = cairo_image_surface_create_from_png("mona.png");
+    	usage();
     else
+    {
         pngsurf = cairo_image_surface_create_from_png(argv[optind]);
 
-    WIDTH = cairo_image_surface_get_width(pngsurf);
-    HEIGHT = cairo_image_surface_get_height(pngsurf);
+        WIDTH = cairo_image_surface_get_width(pngsurf);
+        HEIGHT = cairo_image_surface_get_height(pngsurf);
 
-    /* start main loop  */
-    srandom(getpid() + time(NULL));
-    x_init();
-    mainloop(pngsurf);
+        /* start main loop  */
+        srandom(getpid() + time(NULL));
+        x_init();
+        mainloop(pngsurf);
+    }
 }
 
