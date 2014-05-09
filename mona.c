@@ -407,43 +407,41 @@ int main(int argc, char **argv)
 	char c;
 
 	/* FIXME do proper error checking on the arguments */
-	while ((c = getopt(argc, argv, "ghnoprst")) != -1) {
+	while ((c = getopt(argc, argv, "g:hno:p:r:s:t:")) != -1)
 		switch (c) {
-			case 'o':
-				DUMP = true;
-				OUTPUT_FILENAME = argv[optind++];
-				break;
-			case 't':
-				timestr = argv[optind++];
-				TIMELIMIT = strtol(timestr, NULL, 10);
-				if (TIMELIMIT == 0) {
-					fprintf(stderr, "ERROR: Not a valid time: '%s'\n", timestr);
-					return 1;
-				}
-				break;
-			case 'n':
-				SHOW_WINDOW = false;
-				break;
-			case 'r':
-				REPEAT = strtol(argv[optind++], NULL, 10);
-				break;
-			case 's':
-				NUM_SHAPES = strtol(argv[optind++], NULL, 10);
-				break;
-			case 'p':
-				NUM_POINTS = strtol(argv[optind++], NULL, 10);
-				break;
-			case 'g':
-				seed = strtol(argv[optind++], NULL, 10);
-				break;
-			case 'h':
-				print_help(program_name);
-				return 0;
-			default:
-				fprintf(stderr, "ERROR: unrecognized argument\n");
+		case 'o':
+			DUMP = true;
+			OUTPUT_FILENAME = optarg;
+			break;
+		case 't':
+			TIMELIMIT = strtol(optarg, NULL, 10);
+			if (TIMELIMIT == 0) {
+				fprintf(stderr, "ERROR: Not a valid time: '%s'\n", timestr);
 				return 1;
+			}
+			break;
+		case 'n':
+			SHOW_WINDOW = false;
+			break;
+		case 'r':
+			REPEAT = strtol(optarg, NULL, 10);
+			break;
+		case 's':
+			NUM_SHAPES = strtol(optarg, NULL, 10);
+			break;
+		case 'p':
+			NUM_POINTS = strtol(optarg, NULL, 10);
+			break;
+		case 'g':
+			seed = strtol(optarg, NULL, 10);
+			break;
+		case 'h':
+			print_help(program_name);
+			return 0;
+		default:
+			fprintf(stderr, "ERROR: unrecognized argument\n");
+			return 1;
 		}
-	}
 
 	if (argc - optind == 1) {
 		input_name = argv[optind];
