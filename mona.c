@@ -217,13 +217,21 @@ void write_img(cairo_surface_t* final_surf)
 /* TODO: copy the C# dna format */
 void write_dna(shape_t* dna)
 {
-		char fname[255]; // FIXME
+		// FIXME: Unsafe usage of fname and fname_new
+		char fname_new[255];
+		strcpy(fname_new, OUTPUT_FILENAME);
+		strcat(fname_new, ".dna.new");
+
+		FILE *f = fopen(fname_new, "w");
+		fwrite(dna, sizeof(shape_t), NUM_SHAPES, f);
+		fclose(f);
+
+		char fname[255];
 		strcpy(fname, OUTPUT_FILENAME);
 		strcat(fname, ".dna");
 
-		FILE *f = fopen(fname, "w");
-		fwrite(dna, sizeof(shape_t), NUM_SHAPES, f);
-		fclose(f);
+		// If fname already exist, ensure that either fname or fname_new will be saved.
+		rename(fname_new, fname);
 }
 
 static bool running = true;
