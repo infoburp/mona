@@ -7,6 +7,7 @@
 #include <limits.h>
 #include <getopt.h>
 #include <signal.h>
+#include <string.h>
 
 #include <cairo.h>
 #include "mona.h"
@@ -57,13 +58,6 @@ void x_clean(void)
 	SDL_FreeSurface(screen);
 	SDL_DestroyWindow(win);
 	SDL_Quit();
-}
-#else
-void x_init(void)
-{
-}
-void x_clean(void)
-{
 }
 #endif
 //////////////////////// end X11 stuff ////////////////////////
@@ -223,13 +217,21 @@ void write_img(cairo_surface_t* final_surf)
 /* TODO: copy the C# dna format */
 void write_dna(shape_t* dna)
 {
-		char fname[255]; // FIXME
+		// FIXME: Unsafe usage of fname and fname_new
+		char fname_new[255];
+		strcpy(fname_new, OUTPUT_FILENAME);
+		strcat(fname_new, ".dna.new");
+
+		FILE *f = fopen(fname_new, "w");
+		fwrite(dna, sizeof(shape_t), NUM_SHAPES, f);
+		fclose(f);
+
+		char fname[255];
 		strcpy(fname, OUTPUT_FILENAME);
 		strcat(fname, ".dna");
 
-		FILE *f = fopen(fname, "w");
-		fwrite(dna, sizeof(shape_t), NUM_SHAPES, f);
-		fclose(f);
+		// If fname already exist, ensure that either fname or fname_new will be saved.
+		rename(fname_new, fname);
 }
 
 static bool running = true;
@@ -354,8 +356,10 @@ cleanup:
 	cairo_surface_destroy(test_surf);
 	cairo_destroy(goalcr);
 	cairo_surface_destroy(goal_surf);
+#ifdef WITH_SDL
 	cairo_destroy(xcr);
 	cairo_surface_destroy(xsurf);
+#endif
 	return;
 }
 
@@ -458,9 +462,13 @@ int main(int argc, char **argv)
 	HEIGHT = cairo_image_surface_get_height(pngsurf);
 
 	signal(SIGINT, stopLoop);
+#ifdef WITH_SDL
 	x_init(program_name);
+#endif
 	srand(seed);
 	mainloop(pngsurf);
 	cairo_surface_destroy(pngsurf);
+#ifdef WITH_SDL
 	x_clean();
+#endif
 }

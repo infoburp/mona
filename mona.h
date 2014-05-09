@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdlib.h>
 
 #define RANDINT(max) (int)((rand() / (double)RAND_MAX) * (max))
 #define RANDDOUBLE(max) ((rand() / (double)RAND_MAX) * max)

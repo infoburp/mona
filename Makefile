@@ -1,22 +1,28 @@
+CC = gcc
+LIBS += $(shell pkg-config --libs cairo)
+CFLAGS += -Wall -std=c99 -pedantic -O2 -ggdb -I. $(shell pkg-config --cflags cairo)
+
+WITH_SDL ?= yes
+ifeq "$(WITH_SDL)" "yes"
+    CFLAGS += $(shell sdl2-config --cflags) -DWITH_SDL
+    LIBS += $(shell sdl2-config --libs)
+endif
+
+ifeq "$(WITH_CUDA)" "yes"
+    LIBS += -lm -L/usr/local/cuda/lib64 -lcuda -lcudart
+endif
+
 all: mona
 
 diff.o: Makefile diff.cu diff.c
-ifdef CUDA
-	nvcc -c -arch=sm_20 diff.cu -L/usr/lib64 `pkg-config --libs --cflags cairo` -lm
+ifeq "$(WITH_CUDA)" "yes"
+	nvcc $(CFLAGS) -arch=sm_20 -c diff.cu
 else
-	gcc -DWITH_SDL -Wall -std=c99 -pedantic -O2 -ggdb -I. \
-	`sdl2-config --libs --cflags` \
-	`pkg-config --libs --cflags cairo` \
-	-c diff.c
+	$(CC) $(CFLAGS) -c diff.c
 endif
 
 mona: Makefile diff.o mona.c
-	gcc -DWITH_SDL -Wall -std=c99 -pedantic -O2 -ggdb -I. \
-	-L/usr/local/cuda/lib64 -lcuda -lcudart \
-	`sdl2-config --libs --cflags` \
-	`pkg-config --libs --cflags cairo` -lm \
-	diff.o mona.c -o mona
-	
-clean:
-	rm -f mona *.o 
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBS) diff.o mona.c -o mona
 
+clean:
+	rm -f mona *.o
