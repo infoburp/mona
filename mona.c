@@ -21,6 +21,7 @@ unsigned long TIMELIMIT = 0;
 bool SHOW_WINDOW = true;
 bool DUMP = false;
 int REPEAT = 0;
+int SESSION_REPEAT = 0;
 char* OUTPUT_FILENAME = "oops.png";
 int NUM_POINTS = 6;
 int NUM_SHAPES = 40;
@@ -215,11 +216,11 @@ void write_img(cairo_surface_t* final_surf)
 }
 
 /* TODO: copy the C# dna format */
-void write_dna(shape_t* dna)
+void write_dna(const char * filename, const shape_t * dna)
 {
 		// FIXME: Unsafe usage of fname and fname_new
 		char fname_new[255];
-		strcpy(fname_new, OUTPUT_FILENAME);
+		strcpy(fname_new, filename);
 		strcat(fname_new, ".dna.new");
 
 		FILE *f = fopen(fname_new, "w");
@@ -227,11 +228,20 @@ void write_dna(shape_t* dna)
 		fclose(f);
 
 		char fname[255];
-		strcpy(fname, OUTPUT_FILENAME);
+		strcpy(fname, filename);
 		strcat(fname, ".dna");
 
 		// If fname already exist, ensure that either fname or fname_new will be saved.
 		rename(fname_new, fname);
+}
+
+/* FIXME: NUM_SHAPES and NUM_POINTS must match old values, maybe encode them to saved DNA? */
+void read_dna(const char * filename, shape_t * dna)
+{
+	FILE * f = fopen(filename, "r");
+	// FIXME: analyze return value
+	fread(dna, sizeof(shape_t), NUM_SHAPES, f);
+	fclose(f);
 }
 
 static bool running = true;
@@ -242,7 +252,7 @@ void stopLoop()
 	running = false;
 }
 
-static void mainloop(cairo_surface_t * pngsurf)
+static void mainloop(cairo_surface_t * pngsurf, const char * input_dna_name)
 {
 
 	shape_t dna_best[NUM_SHAPES];
@@ -265,7 +275,12 @@ static void mainloop(cairo_surface_t * pngsurf)
 #endif
 
 	difference_init();
-	init_dna(dna_best);
+
+	if(input_dna_name)
+		read_dna(input_dna_name, dna_best);
+	else
+		init_dna(dna_best);
+
 	memcpy((void *) dna_test, (const void *) dna_best,
 			sizeof(shape_t) * NUM_SHAPES);
 
@@ -300,7 +315,8 @@ static void mainloop(cairo_surface_t * pngsurf)
 		draw_dna(dna_test, test_cr);
 
 		int diff = difference(test_surf, goal_surf);
-		if (diff < lowestdiff) {
+		bool good = diff < lowestdiff ;
+		if (good) {
 			beststep++;
 			// test is good, copy to best
 			dna_best[mutated_shape] = dna_test[mutated_shape];
@@ -328,11 +344,15 @@ static void mainloop(cairo_surface_t * pngsurf)
 					  lowestdiff) / (float) get_max_fitness()) * 100);
 		}
 
-		if (REPEAT != 0 && beststep % REPEAT == 0) {
+		if (REPEAT != 0 && good && beststep % REPEAT == 0) {
 			write_timelapse_img(test_surf, lapses);
 			lapses++;
 		}
 
+		if (SESSION_REPEAT != 0 && good && beststep % SESSION_REPEAT == 0) {
+			write_img(test_surf); // assuming that test and best are equal on this step
+			write_dna(OUTPUT_FILENAME, dna_best);
+		}
 
 		if (TIMELIMIT != 0) {
 			struct timeval t;
@@ -350,7 +370,7 @@ cleanup:
 	difference_clean();
 	if (DUMP) {
 		write_img(test_surf);
-		write_dna(dna_best);
+		write_dna(OUTPUT_FILENAME, dna_best);
 	}
 	cairo_destroy(test_cr);
 	cairo_surface_destroy(test_surf);
@@ -367,7 +387,7 @@ cleanup:
 void print_help(const char *program)
 {
 	printf(
-"Usage: %s [OPTION]... [FILE]\n"
+"Usage: %s [OPTION]... [INPUT_IMAGE] [INPUT_DNA]\n"
 "Evolves an image out of triangles from a source image, using simmulated\n"
 "  annealing. Input images must be in the PNG format.\n"
 "\n"
@@ -375,7 +395,8 @@ void print_help(const char *program)
 "             Images will continue to be generated in the background.\n"
 " -t TIME   Sets a time limit in seconds. Program will terminate afterward.\n"
 " -r ITER   Timelapse mode: will dump intermediate images every ITER iterations.\n"
-" -o FILE   Outputs most fit image at the end of the time limit, named FILE.\n"
+" -o FILE   Outputs most fit image and DNA at the end of the time limit to FILE.\n"
+" -S ITER   Session mode: will save most fit image and DNA to file every ITER iterations. Use filename from \"-o\".\n"
 " -s NUM    The generated images will be made up of NUM polygons\n"
 " -p NUM    The polygons making up the image will have NUM vertices.\n"
 "             Three or more, up to 16.\n"
@@ -384,9 +405,11 @@ void print_help(const char *program)
 	, program);
 }
 
-void print_config(const char* input)
+void print_config(const char* input, const char* input_dna)
 {
-	fprintf(stderr, "Input from %s\n", input);
+	fprintf(stderr, "Input image from %s\n", input);
+	if (input_dna)
+		fprintf(stderr, "Input DNA from %s\n", input_dna);
 	if (DUMP)
 		fprintf(stderr, "Final output at '%s', dna at '%s.dna'\n",
 				OUTPUT_FILENAME, OUTPUT_FILENAME);
@@ -401,17 +424,21 @@ int main(int argc, char **argv)
 {
 	cairo_surface_t *pngsurf;
 	const char* program_name = argv[0];
-	char* input_name = "mona.png";
+	char* input_image_name = "mona.png";
+	char* input_dna_name = NULL;
 	char* timestr = NULL;
 	long seed = getpid() + time(NULL);
 	char c;
 
 	/* FIXME do proper error checking on the arguments */
-	while ((c = getopt(argc, argv, "g:hno:p:r:s:t:")) != -1)
+	while ((c = getopt(argc, argv, "g:hno:S:p:r:s:t:")) != -1)
 		switch (c) {
 		case 'o':
 			DUMP = true;
 			OUTPUT_FILENAME = optarg;
+			break;
+		case 'S':
+			SESSION_REPEAT = strtol(optarg, NULL, 10);
 			break;
 		case 't':
 			TIMELIMIT = strtol(optarg, NULL, 10);
@@ -443,16 +470,20 @@ int main(int argc, char **argv)
 			return 1;
 		}
 
-	if (argc - optind == 1) {
-		input_name = argv[optind];
+	if (argc - optind >= 1) {
+		input_image_name = argv[optind++];
 	}
 
-	print_config(input_name);
+	if (argc - optind >= 1) {
+		input_dna_name = argv[optind++];
+	}
 
-	pngsurf = cairo_image_surface_create_from_png(input_name);
+	print_config(input_image_name, input_dna_name);
+
+	pngsurf = cairo_image_surface_create_from_png(input_image_name);
 	if (cairo_surface_status(pngsurf) != CAIRO_STATUS_SUCCESS) {
 		fprintf(stderr, "ERROR: '%s' is not a valid png file (probably).\n",
-				input_name);
+				input_image_name);
 		return 1;
 	}
 
@@ -464,7 +495,7 @@ int main(int argc, char **argv)
 	x_init(program_name);
 #endif
 	srand(seed);
-	mainloop(pngsurf);
+	mainloop(pngsurf, input_dna_name);
 	cairo_surface_destroy(pngsurf);
 #ifdef WITH_SDL
 	x_clean();
