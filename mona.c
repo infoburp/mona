@@ -11,6 +11,7 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <getopt.h>
+#include <signal.h>
 
 #include <cairo.h>
 
@@ -60,8 +61,17 @@ void x_init(void)
 	}
 }
 
+void x_clean(void)
+{
+	SDL_FreeSurface(screen);
+	SDL_DestroyWindow(win);
+	SDL_Quit();
+}
 #else
 void x_init(void)
+{
+}
+void x_clean(void)
 {
 }
 #endif
@@ -274,6 +284,14 @@ void write_dna(shape_t* dna)
 		fclose(f);
 }
 
+static bool running = true;
+
+
+void stopLoop()
+{
+	running = false;
+}
+
 static void mainloop(cairo_surface_t * pngsurf)
 {
 
@@ -305,23 +323,24 @@ static void mainloop(cairo_surface_t * pngsurf)
 		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT);
 	cairo_t *test_cr = cairo_create(test_surf);
 
-	cairo_surface_t *goalsurf =
+	cairo_surface_t *goal_surf =
 		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT);
-	cairo_t *goalcr = cairo_create(goalsurf);
+	cairo_t *goalcr = cairo_create(goal_surf);
 	copy_surf_to(pngsurf, goalcr);
 
 	int lowestdiff = INT_MAX;
 	int teststep = 0;
 	int lapses   = 0;
 	int beststep = 0;
-	for (;;) {
+	running = true;
+	while (running) {
 #ifdef WITH_SDL
 		if (SHOW_WINDOW) {
 			SDL_Event event;
 			while (SDL_PollEvent(&event)) {
 				if (event.type == SDL_QUIT
 						|| event.type == SDL_WINDOWEVENT_CLOSE) {
-					goto cleanup;
+					stopLoop();
 				}
 			}
 		}
@@ -329,7 +348,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 		int other_mutated = mutate(dna_test);
 		draw_dna(dna_test, test_cr);
 
-		int diff = difference(test_surf, goalsurf);
+		int diff = difference(test_surf, goal_surf);
 		if (diff < lowestdiff) {
 			beststep++;
 			// test is good, copy to best
@@ -371,7 +390,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 				printf("%0.6f\n",
 						((MAX_FITNESS -
 						  lowestdiff) / (float) MAX_FITNESS) * 100);
-				goto cleanup;
+				stopLoop();
 			}
 		}
 	}
@@ -381,6 +400,12 @@ cleanup:
 		write_img(test_surf);
 		write_dna(dna_best);
 	}
+	cairo_destroy(test_cr);
+	cairo_surface_destroy(test_surf);
+	cairo_destroy(goalcr);
+	cairo_surface_destroy(goal_surf);
+	cairo_destroy(xcr);
+	cairo_surface_destroy(xsurf);
 	return;
 }
 
@@ -478,5 +503,8 @@ int main(int argc, char **argv)
 
 	srand(getpid() + time(NULL));
 	x_init();
+	signal(SIGINT, stopLoop);
 	mainloop(pngsurf);
+	cairo_surface_destroy(pngsurf);
+	x_clean();
 }
