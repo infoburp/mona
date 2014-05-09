@@ -44,13 +44,9 @@ void x_init(void)
 
     screen = DefaultScreen(dpy);
 
-    XSetWindowAttributes attr;
-    attr.background_pixmap = ParentRelative;
-    win = XCreateWindow(dpy, DefaultRootWindow(dpy), 0, 0,
-                   WIDTH, HEIGHT, 0,
-                   DefaultDepth(dpy, screen), CopyFromParent, DefaultVisual(dpy, screen),
-                   CWBackPixmap, &attr);
-
+    Window rootwin = RootWindow(dpy, screen);
+    win = XCreateSimpleWindow(dpy, rootwin, 0, 0, WIDTH, HEIGHT, 0, 
+                 BlackPixel(dpy, screen), BlackPixel(dpy, screen)); 
     pixmap = XCreatePixmap(dpy, win, WIDTH, HEIGHT,
             DefaultDepth(dpy, screen));
 
