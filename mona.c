@@ -36,7 +36,7 @@ Pixmap pixmap;
 
 void x_init(void)
 {
-    if(!(dpy = XOpenDisplay(NULL)))
+    if (!(dpy = XOpenDisplay(NULL)))
     {
         fprintf(stderr, "Failed to open X display %s\n", XDisplayName(NULL));
         exit(1);
@@ -100,10 +100,6 @@ shape_t* init_dna()
         dna[i].g = RANDDOUBLE(1);
         dna[i].b = RANDDOUBLE(1);
         dna[i].a = RANDDOUBLE(1);
-        //dna[i].r = 0.5;
-        //dna[i].g = 0.5;
-        //dna[i].b = 0.5;
-        //dna[i].a = 1;
     }
     return dna;
 }
@@ -115,12 +111,12 @@ int mutate(void)
     double drastic = RANDDOUBLE(2);
      
     // mutate color
-    if(roulette<1)
+    if (roulette<1)
     {
-        if(dna_test[mutated_shape].a < 0.01 // completely transparent shapes are stupid
+        if (dna_test[mutated_shape].a < 0.01 // completely transparent shapes are stupid
                 || roulette<0.25)
         {
-            if(drastic < 1)
+            if (drastic < 1)
             {
                 dna_test[mutated_shape].a += RANDDOUBLE(0.1);
                 dna_test[mutated_shape].a = CLAMP(dna_test[mutated_shape].a, 0.0, 1.0);
@@ -128,9 +124,9 @@ int mutate(void)
             else
                 dna_test[mutated_shape].a = RANDDOUBLE(1.0);
         }
-        else if(roulette<0.50)
+        else if (roulette<0.50)
         {
-            if(drastic < 1)
+            if (drastic < 1)
             {
                 dna_test[mutated_shape].r += RANDDOUBLE(0.1);
                 dna_test[mutated_shape].r = CLAMP(dna_test[mutated_shape].r, 0.0, 1.0);
@@ -138,9 +134,9 @@ int mutate(void)
             else
                 dna_test[mutated_shape].r = RANDDOUBLE(1.0);
         }
-        else if(roulette<0.75)
+        else if (roulette<0.75)
         {
-            if(drastic < 1)
+            if (drastic < 1)
             {
                 dna_test[mutated_shape].g += RANDDOUBLE(0.1);
                 dna_test[mutated_shape].g = CLAMP(dna_test[mutated_shape].g, 0.0, 1.0);
@@ -150,7 +146,7 @@ int mutate(void)
         }
         else
         {
-            if(drastic < 1)
+            if (drastic < 1)
             {
                 dna_test[mutated_shape].b += RANDDOUBLE(0.1);
                 dna_test[mutated_shape].b = CLAMP(dna_test[mutated_shape].b, 0.0, 1.0);
@@ -161,12 +157,12 @@ int mutate(void)
     }
     
     // mutate shape
-    else if(roulette < 2.0)
+    else if (roulette < 2.0)
     {
         int point_i = RANDINT(POINTS);
-        if(roulette<1.5)
+        if (roulette<1.5)
         {
-            if(drastic < 1)
+            if (drastic < 1)
             {
                 dna_test[mutated_shape].points[point_i].x += (int)RANDDOUBLE(WIDTH/10.0);
                 dna_test[mutated_shape].points[point_i].x = CLAMP(dna_test[mutated_shape].points[point_i].x, 0, WIDTH-1);
@@ -176,7 +172,7 @@ int mutate(void)
         }
         else
         {
-            if(drastic < 1)
+            if (drastic < 1)
             {
                 dna_test[mutated_shape].points[point_i].y += (int)RANDDOUBLE(HEIGHT/10.0);
                 dna_test[mutated_shape].points[point_i].y = CLAMP(dna_test[mutated_shape].points[point_i].y, 0, HEIGHT-1);
@@ -206,7 +202,7 @@ unsigned char * goal_data = NULL;
 int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
 {
     unsigned char * test_data = cairo_image_surface_get_data(test_surf);
-    if(!goal_data)
+    if (!goal_data)
         goal_data = cairo_image_surface_get_data(goal_surf);
 
     int difference = 0;
@@ -229,7 +225,7 @@ int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
             unsigned char goal_g = goal_data[thispixel + 2];
             unsigned char goal_b = goal_data[thispixel + 3];
 
-            if(MAX_FITNESS == -1)
+            if (MAX_FITNESS == -1)
                 my_max_fitness += goal_a + goal_r + goal_g + goal_b;
 
             difference += ABS(test_a - goal_a);
@@ -239,7 +235,7 @@ int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
         }
     }
 
-    if(MAX_FITNESS == -1)
+    if (MAX_FITNESS == -1)
         MAX_FITNESS = my_max_fitness;
     return difference;
 }
@@ -270,13 +266,11 @@ static void mainloop(cairo_surface_t * pngsurf)
 {
     struct timeval start;
     gettimeofday(&start, NULL);
-
     dna_best = init_dna();
     dna_test = init_dna();
     /* copy dna_best to dna_test */
     for (int i = 0; i < SHAPES; i++)
         copy_shape(dna_best, dna_test, i); 
-
     cairo_surface_t * xsurf = cairo_xlib_surface_create(
             dpy, pixmap, DefaultVisual(dpy, screen), WIDTH, HEIGHT);
     cairo_t * xcr = cairo_create(xsurf);
@@ -296,12 +290,12 @@ static void mainloop(cairo_surface_t * pngsurf)
         draw_dna(dna_test, test_cr);
 
         int diff = difference(test_surf, goalsurf);
-        if(diff < lowestdiff)
+        if (diff < lowestdiff)
         {
             beststep++;
             // test is good, copy to best
             copy_shape(dna_test, dna_best, mutated_shape);
-            if(other_mutated >= 0)
+            if (other_mutated >= 0)
                 copy_shape(dna_test, dna_best, other_mutated);
             copy_surf_to(test_surf, xcr); // also copy to display
             XCopyArea(dpy, pixmap, win, gc,
@@ -314,7 +308,7 @@ static void mainloop(cairo_surface_t * pngsurf)
         {
             // test sucks, copy best back over test
             copy_shape(dna_best, dna_test, mutated_shape);
-            if(other_mutated >= 0)
+            if (other_mutated >= 0)
                 copy_shape(dna_best, dna_test, other_mutated);
         }
 
@@ -323,7 +317,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 #ifdef TIMELIMIT
         struct timeval t;
         gettimeofday(&t, NULL);
-        if(t.tv_sec - start.tv_sec > TIMELIMIT)
+        if (t.tv_sec - start.tv_sec > TIMELIMIT)
         {
             printf("%0.6f\n", ((MAX_FITNESS-lowestdiff) / (float)MAX_FITNESS)*100);
 #ifdef DUMP
@@ -336,12 +330,12 @@ static void mainloop(cairo_surface_t * pngsurf)
             return;
         }
 #else
-        if(teststep % 100 == 0)
+        if (teststep % 100 == 0)
             printf("Step:\t\t Improvement:%d Total:%d (%5.2f%%)\nResemblance:\t %0.6f%%\n",
                     beststep, teststep,(((float)beststep)/((float)teststep))*100, ((MAX_FITNESS-lowestdiff) / (float)MAX_FITNESS)*100);
 #endif
 
-        if(teststep % 100 == 0 && XPending(dpy))
+        if (teststep % 100 == 0 && XPending(dpy))
         {
             XEvent xev;
             XNextEvent(dpy, &xev);
@@ -383,7 +377,6 @@ void usage()
 
 int main(int argc, char ** argv) {
     /* parse command line arguments */
-    char* sizearg = 0;
     int c;
     while ( (c = getopt(argc, argv, "s:")) != -1)
     {
@@ -400,7 +393,7 @@ int main(int argc, char ** argv) {
     }
     /* load image from png*/
     cairo_surface_t * pngsurf;
-    if(argv[optind] == NULL)
+    if (argv[optind] == NULL)
     	usage();
     else
     {
