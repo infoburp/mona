@@ -1,29 +1,20 @@
 // written by nick welch <nick@incise.org>.  author disclaims copyright.
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
 #include <time.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include <limits.h>
-#include <stdbool.h>
 #include <getopt.h>
 #include <signal.h>
 
 #include <cairo.h>
-
-#define RANDINT(max) (int)((rand() / (double)RAND_MAX) * (max))
-#define RANDDOUBLE(max) ((rand() / (double)RAND_MAX) * max)
-#define ABS(val) ((val) < 0 ? -(val) : (val))
-#define CLAMP(val, min, max) ((val) < (min) ? (min) : (val) > (max) ? (max) : (val))
+#include "mona.h"
+#include "diff.h"
 
 #define MAX_POINTS 16
 
-int WIDTH;
-int HEIGHT;
+int WIDTH, HEIGHT;
 
 unsigned long TIMELIMIT = 0;
 bool SHOW_WINDOW = true;
@@ -41,14 +32,14 @@ int NUM_SHAPES = 40;
 SDL_Window *win;
 SDL_Surface *screen;
 
-void x_init(void)
+void x_init(const char* name)
 {
 	if (SHOW_WINDOW) {
 		if (SDL_Init(SDL_INIT_VIDEO) != 0) {
 			fprintf(stderr, "ERROR: %s\n", SDL_GetError());
 			exit(1);
 		}
-		win = SDL_CreateWindow("mona",
+		win = SDL_CreateWindow(name,
 				SDL_WINDOWPOS_UNDEFINED,
 				SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, 0);
 
@@ -198,49 +189,6 @@ int mutate(shape_t* dna_test)
 
 }
 
-int MAX_FITNESS = -1;
-
-unsigned char *goal_data = NULL;
-
-int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
-{
-	unsigned char *test_data = cairo_image_surface_get_data(test_surf);
-	if (!goal_data)
-		goal_data = cairo_image_surface_get_data(goal_surf);
-
-	int difference = 0;
-
-	int my_max_fitness = 0;
-
-	for (int y = 0; y < HEIGHT; y++) {
-		for (int x = 0; x < WIDTH; x++) {
-			int thispixel = y * WIDTH * 4 + x * 4;
-
-			unsigned char test_a = test_data[thispixel];
-			unsigned char test_r = test_data[thispixel + 1];
-			unsigned char test_g = test_data[thispixel + 2];
-			unsigned char test_b = test_data[thispixel + 3];
-
-			unsigned char goal_a = goal_data[thispixel];
-			unsigned char goal_r = goal_data[thispixel + 1];
-			unsigned char goal_g = goal_data[thispixel + 2];
-			unsigned char goal_b = goal_data[thispixel + 3];
-
-			if (MAX_FITNESS == -1)
-				my_max_fitness += goal_a + goal_r + goal_g + goal_b;
-
-			difference += ABS(test_a - goal_a);
-			difference += ABS(test_r - goal_r);
-			difference += ABS(test_g - goal_g);
-			difference += ABS(test_b - goal_b);
-		}
-	}
-
-	if (MAX_FITNESS == -1)
-		MAX_FITNESS = my_max_fitness;
-	return difference;
-}
-
 void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
 {
 	cairo_set_source_rgb(cr, 1, 1, 1);
@@ -314,6 +262,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 	}
 #endif
 
+	difference_init();
 	init_dna(dna_best);
 	memcpy((void *) dna_test, (const void *) dna_best,
 			sizeof(shape_t) * NUM_SHAPES);
@@ -373,8 +322,8 @@ static void mainloop(cairo_surface_t * pngsurf)
 		if (teststep % 100 == 0) {
 			printf("Step = %d/%d\nFitness = %0.6f%%\n",
 					beststep, teststep,
-					((MAX_FITNESS -
-					  lowestdiff) / (float) MAX_FITNESS) * 100);
+					((get_max_fitness() -
+					  lowestdiff) / (float) get_max_fitness()) * 100);
 		}
 
 		if (REPEAT != 0 && beststep % REPEAT == 0) {
@@ -388,14 +337,15 @@ static void mainloop(cairo_surface_t * pngsurf)
 			gettimeofday(&t, NULL);
 			if (t.tv_sec - start.tv_sec > TIMELIMIT) {
 				printf("%0.6f\n",
-						((MAX_FITNESS -
-						  lowestdiff) / (float) MAX_FITNESS) * 100);
+						((get_max_fitness() -
+						  lowestdiff) / (float) get_max_fitness()) * 100);
 				stopLoop();
 			}
 		}
 	}
 
 cleanup:
+	difference_clean();
 	if (DUMP) {
 		write_img(test_surf);
 		write_dna(dna_best);
@@ -425,6 +375,7 @@ void print_help(const char *program)
 " -s NUM    The generated images will be made up of NUM polygons\n"
 " -p NUM    The polygons making up the image will have NUM vertices.\n"
 "             Three or more, up to 16.\n"
+" -g NUM    Sets the seed for the random number generator to NUM. base-10 only.\n"
 " -h        Displays this help and exits.\n"
 	, program);
 }
@@ -445,12 +396,14 @@ void print_config(const char* input)
 int main(int argc, char **argv)
 {
 	cairo_surface_t *pngsurf;
+	const char* program_name = argv[0];
 	char* input_name = "mona.png";
 	char* timestr = NULL;
+	long seed = getpid() + time(NULL);
 	char c;
 
 	/* FIXME do proper error checking on the arguments */
-	while ((c = getopt(argc, argv, "rntopsh")) != -1) {
+	while ((c = getopt(argc, argv, "ghnoprst")) != -1) {
 		switch (c) {
 			case 'o':
 				DUMP = true;
@@ -476,8 +429,11 @@ int main(int argc, char **argv)
 			case 'p':
 				NUM_POINTS = strtol(argv[optind++], NULL, 10);
 				break;
+			case 'g':
+				seed = strtol(argv[optind++], NULL, 10);
+				break;
 			case 'h':
-				print_help(argv[0]);
+				print_help(program_name);
 				return 0;
 			default:
 				fprintf(stderr, "ERROR: unrecognized argument\n");
@@ -501,9 +457,9 @@ int main(int argc, char **argv)
 	WIDTH = cairo_image_surface_get_width(pngsurf);
 	HEIGHT = cairo_image_surface_get_height(pngsurf);
 
-	srand(getpid() + time(NULL));
-	x_init();
 	signal(SIGINT, stopLoop);
+	x_init(program_name);
+	srand(seed);
 	mainloop(pngsurf);
 	cairo_surface_destroy(pngsurf);
 	x_clean();
