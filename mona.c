@@ -1,32 +1,27 @@
 // written by nick welch <nick@incise.org>.  author disclaims copyright.
 
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <math.h>
 #include <time.h>
 #include <sys/time.h>
-#include <sys/types.h>
 #include <unistd.h>
 #include <limits.h>
-#include <stdbool.h>
 #include <getopt.h>
+#include <signal.h>
+#include <string.h>
 
 #include <cairo.h>
-
-#define RANDINT(max) (int)((random() / (double)RAND_MAX) * (max))
-#define RANDDOUBLE(max) ((random() / (double)RAND_MAX) * max)
-#define ABS(val) ((val) < 0 ? -(val) : (val))
-#define CLAMP(val, min, max) ((val) < (min) ? (min) : (val) > (max) ? (max) : (val))
+#include "mona.h"
+#include "diff.h"
 
 #define MAX_POINTS 16
 
-int WIDTH;
-int HEIGHT;
+int WIDTH, HEIGHT;
 
 unsigned long TIMELIMIT = 0;
 bool SHOW_WINDOW = true;
 bool DUMP = false;
+int REPEAT = 0;
+char* OUTPUT_FILENAME = "oops.png";
 int NUM_POINTS = 6;
 int NUM_SHAPES = 40;
 
@@ -38,19 +33,19 @@ int NUM_SHAPES = 40;
 SDL_Window *win;
 SDL_Surface *screen;
 
-void x_init(void)
+void x_init(const char* name)
 {
 	if (SHOW_WINDOW) {
 		if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-			fprintf(stderr, "ERR: %s\n", SDL_GetError());
+			fprintf(stderr, "ERROR: %s\n", SDL_GetError());
 			exit(1);
 		}
-		win = SDL_CreateWindow("mona",
+		win = SDL_CreateWindow(name,
 				SDL_WINDOWPOS_UNDEFINED,
 				SDL_WINDOWPOS_UNDEFINED, WIDTH, HEIGHT, 0);
 
 		if (win == NULL) {
-			fprintf(stderr, "ERR: %s\n", SDL_GetError());
+			fprintf(stderr, "ERROR: %s\n", SDL_GetError());
 			exit(1);
 		}
 
@@ -58,9 +53,11 @@ void x_init(void)
 	}
 }
 
-#else
-void x_init(void)
+void x_clean(void)
 {
+	SDL_FreeSurface(screen);
+	SDL_DestroyWindow(win);
+	SDL_Quit();
 }
 #endif
 //////////////////////// end X11 stuff ////////////////////////
@@ -186,57 +183,55 @@ int mutate(shape_t* dna_test)
 
 }
 
-int MAX_FITNESS = -1;
-
-unsigned char *goal_data = NULL;
-
-int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
-{
-	unsigned char *test_data = cairo_image_surface_get_data(test_surf);
-	if (!goal_data)
-		goal_data = cairo_image_surface_get_data(goal_surf);
-
-	int difference = 0;
-
-	int my_max_fitness = 0;
-
-	for (int y = 0; y < HEIGHT; y++) {
-		for (int x = 0; x < WIDTH; x++) {
-			int thispixel = y * WIDTH * 4 + x * 4;
-
-			unsigned char test_a = test_data[thispixel];
-			unsigned char test_r = test_data[thispixel + 1];
-			unsigned char test_g = test_data[thispixel + 2];
-			unsigned char test_b = test_data[thispixel + 3];
-
-			unsigned char goal_a = goal_data[thispixel];
-			unsigned char goal_r = goal_data[thispixel + 1];
-			unsigned char goal_g = goal_data[thispixel + 2];
-			unsigned char goal_b = goal_data[thispixel + 3];
-
-			if (MAX_FITNESS == -1)
-				my_max_fitness += goal_a + goal_r + goal_g + goal_b;
-
-			difference += ABS(test_a - goal_a);
-			difference += ABS(test_r - goal_r);
-			difference += ABS(test_g - goal_g);
-			difference += ABS(test_b - goal_b);
-		}
-	}
-
-	if (MAX_FITNESS == -1)
-		MAX_FITNESS = my_max_fitness;
-	return difference;
-}
-
 void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
 {
 	cairo_set_source_rgb(cr, 1, 1, 1);
 	cairo_rectangle(cr, 0, 0, WIDTH, HEIGHT);
 	cairo_fill(cr);
-	//cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
 	cairo_set_source_surface(cr, surf, 0, 0);
 	cairo_paint(cr);
+}
+
+void write_timelapse_img(cairo_surface_t* final_surf, int frame)
+{
+	char fname[255];
+	snprintf(fname, 255, "%.4d%s", frame, OUTPUT_FILENAME);
+	cairo_status_t err = cairo_surface_write_to_png(final_surf, fname);
+	if (err != CAIRO_STATUS_SUCCESS) {
+		fprintf(stderr, "Error writing image to disk: %s",
+				cairo_status_to_string(err));
+	}
+	fprintf(stderr, "Image succesfully saved as '%s'\n", fname);
+}
+
+void write_img(cairo_surface_t* final_surf)
+{
+	cairo_status_t err = cairo_surface_write_to_png(final_surf, OUTPUT_FILENAME);
+	if (err != CAIRO_STATUS_SUCCESS) {
+		fprintf(stderr, "Error writing image to disk: %s",
+				cairo_status_to_string(err));
+	}
+	fprintf(stderr, "Image succesfully saved as '%s'\n", OUTPUT_FILENAME);
+}
+
+/* TODO: copy the C# dna format */
+void write_dna(shape_t* dna)
+{
+		char fname[255]; // FIXME
+		strcpy(fname, OUTPUT_FILENAME);
+		strcat(fname, ".dna");
+
+		FILE *f = fopen(fname, "w");
+		fwrite(dna, sizeof(shape_t), NUM_SHAPES, f);
+		fclose(f);
+}
+
+static bool running = true;
+
+
+void stopLoop()
+{
+	running = false;
 }
 
 static void mainloop(cairo_surface_t * pngsurf)
@@ -247,10 +242,6 @@ static void mainloop(cairo_surface_t * pngsurf)
 
 	struct timeval start;
 	gettimeofday(&start, NULL);
-
-	init_dna(dna_best);
-	memcpy((void *) dna_test, (const void *) dna_best,
-			sizeof(shape_t) * NUM_SHAPES);
 
 #ifdef WITH_SDL
 	cairo_surface_t *xsurf = NULL;
@@ -265,23 +256,42 @@ static void mainloop(cairo_surface_t * pngsurf)
 	}
 #endif
 
+	difference_init();
+	init_dna(dna_best);
+	memcpy((void *) dna_test, (const void *) dna_best,
+			sizeof(shape_t) * NUM_SHAPES);
+
+
 	cairo_surface_t *test_surf =
 		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT);
 	cairo_t *test_cr = cairo_create(test_surf);
 
-	cairo_surface_t *goalsurf =
+	cairo_surface_t *goal_surf =
 		cairo_image_surface_create(CAIRO_FORMAT_ARGB32, WIDTH, HEIGHT);
-	cairo_t *goalcr = cairo_create(goalsurf);
+	cairo_t *goalcr = cairo_create(goal_surf);
 	copy_surf_to(pngsurf, goalcr);
 
 	int lowestdiff = INT_MAX;
 	int teststep = 0;
+	int lapses   = 0;
 	int beststep = 0;
-	for (;;) {
+	running = true;
+	while (running) {
+#ifdef WITH_SDL
+		if (SHOW_WINDOW) {
+			SDL_Event event;
+			while (SDL_PollEvent(&event)) {
+				if (event.type == SDL_QUIT
+						|| event.type == SDL_WINDOWEVENT_CLOSE) {
+					stopLoop();
+				}
+			}
+		}
+#endif
 		int other_mutated = mutate(dna_test);
 		draw_dna(dna_test, test_cr);
 
-		int diff = difference(test_surf, goalsurf);
+		int diff = difference(test_surf, goal_surf);
 		if (diff < lowestdiff) {
 			beststep++;
 			// test is good, copy to best
@@ -303,43 +313,48 @@ static void mainloop(cairo_surface_t * pngsurf)
 		}
 
 		teststep++;
+		if (teststep % 100 == 0) {
+			printf("Step = %d/%d\nFitness = %0.6f%%\n",
+					beststep, teststep,
+					((get_max_fitness() -
+					  lowestdiff) / (float) get_max_fitness()) * 100);
+		}
+
+		if (REPEAT != 0 && beststep % REPEAT == 0) {
+			write_timelapse_img(test_surf, lapses);
+			lapses++;
+		}
+
 
 		if (TIMELIMIT != 0) {
 			struct timeval t;
 			gettimeofday(&t, NULL);
 			if (t.tv_sec - start.tv_sec > TIMELIMIT) {
 				printf("%0.6f\n",
-						((MAX_FITNESS -
-						  lowestdiff) / (float) MAX_FITNESS) * 100);
-				if (DUMP) {
-					char filename[50];
-					sprintf(filename, "%d.data", getpid());
-					FILE *f = fopen(filename, "w");
-					fwrite(dna_best, sizeof(shape_t), NUM_SHAPES, f);
-					fclose(f);
-				}
-				return;
-			}
-		} else if (teststep % 100 == 0) {
-			printf("Step = %d/%d\nFitness = %0.6f%%\n",
-					beststep, teststep,
-					((MAX_FITNESS -
-					  lowestdiff) / (float) MAX_FITNESS) * 100);
-		}
-
-#ifdef WITH_SDL
-		if (SHOW_WINDOW) {
-			SDL_Event event;
-			while (SDL_PollEvent(&event)) {
-				if (event.type == SDL_QUIT
-						|| event.type == SDL_WINDOWEVENT_CLOSE) {
-					exit(0);
-				}
+						((get_max_fitness() -
+						  lowestdiff) / (float) get_max_fitness()) * 100);
+				stopLoop();
 			}
 		}
-#endif
 	}
+
+cleanup:
+	difference_clean();
+	if (DUMP) {
+		write_img(test_surf);
+		write_dna(dna_best);
+	}
+	cairo_destroy(test_cr);
+	cairo_surface_destroy(test_surf);
+	cairo_destroy(goalcr);
+	cairo_surface_destroy(goal_surf);
+#ifdef WITH_SDL
+	cairo_destroy(xcr);
+	cairo_surface_destroy(xsurf);
+#endif
+	return;
 }
+
 
 void print_help(const char *program)
 {
@@ -351,71 +366,101 @@ void print_help(const char *program)
 " -n        hides the intermediate view, such that there is (N)o window.\n"
 "             Images will continue to be generated in the background.\n"
 " -t TIME   Sets a time limit in seconds. Program will terminate afterward.\n"
+" -r ITER   Timelapse mode: will dump intermediate images every ITER iterations.\n"
 " -o FILE   Outputs most fit image at the end of the time limit, named FILE.\n"
 " -s NUM    The generated images will be made up of NUM polygons\n"
 " -p NUM    The polygons making up the image will have NUM vertices.\n"
 "             Three or more, up to 16.\n"
+" -g NUM    Sets the seed for the random number generator to NUM. base-10 only.\n"
 " -h        Displays this help and exits.\n"
 	, program);
+}
+
+void print_config(const char* input)
+{
+	fprintf(stderr, "Input from %s\n", input);
+	if (DUMP)
+		fprintf(stderr, "Final output at '%s', dna at '%s.dna'\n",
+				OUTPUT_FILENAME, OUTPUT_FILENAME);
+
+	if (TIMELIMIT)
+		fprintf(stderr, "Running for %lu seconds.\n", TIMELIMIT);
+	fprintf(stderr, "Images will have %d shapes.\n", NUM_SHAPES);
+	fprintf(stderr, "Shapes will have %d points.\n", NUM_POINTS);
 }
 
 int main(int argc, char **argv)
 {
 	cairo_surface_t *pngsurf;
+	const char* program_name = argv[0];
 	char* input_name = "mona.png";
 	char* timestr = NULL;
+	long seed = getpid() + time(NULL);
 	char c;
 
-	while ((c = getopt(argc, argv, "ntopsh")) != -1) {
+	/* FIXME do proper error checking on the arguments */
+	while ((c = getopt(argc, argv, "ghnoprst")) != -1) {
 		switch (c) {
 			case 'o':
 				DUMP = true;
-				fprintf(stderr, "Final output at '%s'\n", argv[optind++]);
+				OUTPUT_FILENAME = argv[optind++];
 				break;
 			case 't':
 				timestr = argv[optind++];
 				TIMELIMIT = strtol(timestr, NULL, 10);
 				if (TIMELIMIT == 0) {
-					fprintf(stderr, "Not a valid time: '%s'\n", timestr);
+					fprintf(stderr, "ERROR: Not a valid time: '%s'\n", timestr);
 					return 1;
 				}
-				fprintf(stderr, "Running for %lu seconds.\n", TIMELIMIT);
 				break;
 			case 'n':
 				SHOW_WINDOW = false;
 				break;
-			/* FIXME: proper error checking for the next two opts */
+			case 'r':
+				REPEAT = strtol(argv[optind++], NULL, 10);
+				break;
 			case 's':
 				NUM_SHAPES = strtol(argv[optind++], NULL, 10);
-				fprintf(stderr, "Images will have %d shapes.\n", NUM_SHAPES);
 				break;
 			case 'p':
 				NUM_POINTS = strtol(argv[optind++], NULL, 10);
-				fprintf(stderr, "Shapes will have %d points.\n", NUM_POINTS);
+				break;
+			case 'g':
+				seed = strtol(argv[optind++], NULL, 10);
 				break;
 			case 'h':
-				print_help(argv[0]);
+				print_help(program_name);
 				return 0;
 			default:
-				abort();
+				fprintf(stderr, "ERROR: unrecognized argument\n");
+				return 1;
 		}
 	}
-	fprintf(stderr, "\n\n");
 
 	if (argc - optind == 1) {
 		input_name = argv[optind];
 	}
 
+	print_config(input_name);
+
 	pngsurf = cairo_image_surface_create_from_png(input_name);
 	if (cairo_surface_status(pngsurf) != CAIRO_STATUS_SUCCESS) {
-		fprintf(stderr, "ERR: '%s' is not a valid png file (probably).\n", input_name);
+		fprintf(stderr, "ERROR: '%s' is not a valid png file (probably).\n",
+				input_name);
 		return 1;
 	}
 
 	WIDTH = cairo_image_surface_get_width(pngsurf);
 	HEIGHT = cairo_image_surface_get_height(pngsurf);
 
-	srandom(getpid() + time(NULL));
-	x_init();
+	signal(SIGINT, stopLoop);
+#ifdef WITH_SDL
+	x_init(program_name);
+#endif
+	srand(seed);
 	mainloop(pngsurf);
+	cairo_surface_destroy(pngsurf);
+#ifdef WITH_SDL
+	x_clean();
+#endif
 }
