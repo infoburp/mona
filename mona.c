@@ -21,6 +21,8 @@
 #include <cairo.h>
 #include <cairo-xlib.h>
 
+#include <pthread.h>
+
 #define RANDINT(max)          (random() % max)
 #define RANDDOUBLE(max)       ((random() / (double)RAND_MAX) * max)
 #define ABS(val)              ((val) < 0 ? -(val) : (val))
@@ -44,7 +46,8 @@ int      screen;
 void x_init(void)
 {
 	XSetWindowAttributes attr;
-	attr.background_pixmap = ParentRelative;
+	attr.background_pixmap = None;
+	attr.backing_store = Always;
 
 	if(!(dpy = XOpenDisplay(NULL))) {
 		fprintf(stderr, "Failed to open X display %s\n",
@@ -54,13 +57,14 @@ void x_init(void)
 	screen = DefaultScreen(dpy);
 	win    = XCreateWindow(dpy, DefaultRootWindow(dpy), 0, 0, width,
 	                       height, 0, DefaultDepth(dpy, screen),
-	                       CopyFromParent, DefaultVisual(dpy, screen),
-	                       CWBackPixmap, &attr);
+	                       CopyFromParent, CopyFromParent,
+	                       CWBackPixmap|CWBackingStore, &attr);
 	pixmap = XCreatePixmap(dpy, win, width, height,
 	                       DefaultDepth(dpy, screen));
 	gc     = XCreateGC(dpy, pixmap, 0, NULL);
 	XSelectInput(dpy, win, ExposureMask);
 	XMapWindow(dpy, win);
+	XFlush(dpy);
 }
 #endif
 //////////////////////// end X11 stuff ////////////////////////
@@ -257,10 +261,57 @@ void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
 	cairo_paint(cr);
 }
 
-static void mainloop(cairo_surface_t * pngsurf)
+typedef struct stats {
+	int *lowestdiff;
+	int *beststep;
+	int *teststep;
+} stats;
+
+void printstats(stats *pstats)
 {
 	struct timeval start;
 	gettimeofday(&start, NULL);
+	for(;;) {
+#ifdef TIMELIMIT
+		struct timeval t;
+		gettimeofday(&t, NULL);
+		if(t.tv_sec - start.tv_sec > TIMELIMIT) {
+			printf("%0.6f\n",
+			       ((MAX_FITNESS-*(pstats->lowestdiff)) /
+				 (float)MAX_FITNESS)*100);
+			exit(0);
+		}
+#ifdef DUMP
+		char filename[50];
+		sprintf(filename, "%d.data", getpid());
+		FILE * f = fopen(filename, "w");
+		fwrite(dna_best, sizeof(s_t), NUM_SHAPES, f);
+		fclose(f);
+#endif
+#else
+		printf("Step = %d/%d\nFitness = %0.6f%%\n",
+		       *(pstats->beststep), *(pstats->teststep),
+		       ((MAX_FITNESS-*(pstats->lowestdiff))
+			 / (float)MAX_FITNESS)*100);
+#endif
+		sleep(1);
+#ifdef SHOWWINDOW
+		XEvent xev;
+		XNextEvent(dpy, &xev);
+		if(XPending(dpy) && xev.type == Expose) {
+			XCopyArea(dpy, pixmap, win, gc, xev.xexpose.x,
+			          xev.xexpose.y, xev.xexpose.width,
+			          xev.xexpose.height, xev.xexpose.x,
+			          xev.xexpose.y);
+		}
+#endif
+	}
+}
+
+static void mainloop(cairo_surface_t * pngsurf)
+{
+	pthread_t stats_thread;
+	struct stats pstats;
 
 	init_dna(dna_best);
 	memcpy((void *)dna_test, (const void *)dna_best,
@@ -285,6 +336,13 @@ static void mainloop(cairo_surface_t * pngsurf)
 	int lowestdiff = INT_MAX;
 	int teststep = 0;
 	int beststep = 0;
+
+	//pstats = { &lowestdiff, &teststep, &beststep };
+	pstats.lowestdiff = &lowestdiff;
+	pstats.teststep = &teststep;
+	pstats.beststep = &beststep;
+	pthread_create(&stats_thread, NULL, (void*)printstats, (void*)&pstats);
+
 	for(;;) {
 		int other_mutated = mutate();
 		draw_dna(dna_test, test_cr);
@@ -302,6 +360,7 @@ static void mainloop(cairo_surface_t * pngsurf)
 			copy_surf_to(test_surf, xcr); // also copy to display
 			XCopyArea(dpy, pixmap, win, gc, 0, 0, width, height,
 			 0, 0);
+			XFlush(dpy);
 #endif
 			lowestdiff = diff;
 		} else {
@@ -312,45 +371,8 @@ static void mainloop(cairo_surface_t * pngsurf)
 				 dna_best[other_mutated];
 			}
 		}
-
 		teststep++;
-
-#ifdef TIMELIMIT
-		struct timeval t;
-		gettimeofday(&t, NULL);
-		if(t.tv_sec - start.tv_sec > TIMELIMIT) {
-			printf("%0.6f\n",
-			       ((MAX_FITNESS-lowestdiff) /
-				 (float)MAX_FITNESS)*100);
-		}
-#ifdef DUMP
-		char filename[50];
-		sprintf(filename, "%d.data", getpid());
-		FILE * f = fopen(filename, "w");
-		fwrite(dna_best, sizeof(s_t), NUM_SHAPES, f);
-		fclose(f);
-#endif
-		return;
 	}
-#else
-	if(teststep % 100 == 0) {
-	printf("Step = %d/%d\nFitness = %0.6f%%\n", beststep, teststep,
-	       ((MAX_FITNESS-lowestdiff) / (float)MAX_FITNESS)*100);
-	}
-#endif
-
-#ifdef SHOWWINDOW
-	if(teststep % 100 == 0 && XPending(dpy)) {
-		XEvent xev;
-		XNextEvent(dpy, &xev);
-		if(xev.type == Expose) {
-			XCopyArea(dpy, pixmap, win, gc, xev.xexpose.x,
-			 xev.xexpose.y, xev.xexpose.width, xev.xexpose.height,
-			 xev.xexpose.x, xev.xexpose.y);
-		}
-	}
-#endif
-	} /* ??? */
 }
 
 int main(int argc, char ** argv) {
