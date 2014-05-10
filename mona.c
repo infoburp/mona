@@ -21,7 +21,7 @@
 #include <cairo.h>
 #include <cairo-xlib.h>
 
-#define RANDINT(max)          (int)((random() / (double)RAND_MAX) * (max))
+#define RANDINT(max)          (random() % max)
 #define RANDDOUBLE(max)       ((random() / (double)RAND_MAX) * max)
 #define ABS(val)              ((val) < 0 ? -(val) : (val))
 #define CLAMP(val, min, max)  ((val) < (min) ? (min) : \
