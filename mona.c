@@ -101,7 +101,7 @@ void draw_shape(s_t *dna, cairo_t *cr, int i)
 	cairo_fill(cr);
 }
 
-void draw_dna(s_t * dna, cairo_t * cr)
+void draw_dna(s_t *dna, cairo_t *cr)
 {
 	int i;
 	cairo_set_source_rgb(cr, 1, 1, 1);
@@ -111,7 +111,7 @@ void draw_dna(s_t * dna, cairo_t * cr)
 		draw_shape(dna, cr, i);
 }
 
-void init_dna(s_t * dna)
+void init_dna(s_t *dna)
 {
 	int i, j;
 	for(i = 0; i < NUM_SHAPES; i++) {
@@ -181,19 +181,20 @@ int mutate(void)
 		if(roulette < 1.5) {
 			if(drastic < 1) {
 				dna_test[mshape].ps[p_i].x +=
-				 (int)RANDDOUBLE(width/10.0);
+				 (int)RANDDOUBLE(width / 10.0);
 				dna_test[mshape].ps[p_i].x =
-				 CLAMP(dna_test[mshape].ps[p_i].x, 0, width-1);
+				 CLAMP(dna_test[mshape].ps[p_i].x, 0,
+				       width - 1);
 			} else {
 				dna_test[mshape].ps[p_i].x = RANDDOUBLE(width);
 			}
 		} else {
 			if(drastic < 1) {
 				dna_test[mshape].ps[p_i].y +=
-				 (int)RANDDOUBLE(height/10.0);
+				 (int)RANDDOUBLE(height / 10.0);
 				dna_test[mshape].ps[p_i].y =
 				 CLAMP(dna_test[mshape].ps[p_i].y, 0,
-				       height-1);
+				       height - 1);
 			} else {
 				dna_test[mshape].ps[p_i].y =
 				 RANDDOUBLE(height);
@@ -213,12 +214,12 @@ int mutate(void)
 
 int MAX_FITNESS = -1;
 
-unsigned char * goal_data = NULL;
+unsigned char *goal_data = NULL;
 
-int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
+int difference(cairo_surface_t *test_surf, cairo_surface_t *goal_surf)
 {
 	int x, y;
-	unsigned char * test_data = cairo_image_surface_get_data(test_surf);
+	unsigned char *test_data = cairo_image_surface_get_data(test_surf);
 
 	if(!goal_data) {
 		goal_data = cairo_image_surface_get_data(goal_surf);
@@ -228,7 +229,7 @@ int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
 
 	for(y = 0; y < height; y++) {
 		for(x = 0; x < width; x++) {
-			int thispixel = y*width*4 + x*4;
+			int thispixel = (y * width * 4) + (x * 4);
 
 			unsigned char test_a = test_data[thispixel];
 			unsigned char test_r = test_data[thispixel + 1];
@@ -257,7 +258,7 @@ int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
 	return difference;
 }
 
-void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
+void copy_surf_to(cairo_surface_t *surf, cairo_t *cr)
 {
 	cairo_set_source_rgb(cr, 1, 1, 1);
 	cairo_rectangle(cr, 0, 0, width, height);
@@ -277,22 +278,22 @@ void printstats()
 		gettimeofday(&t, NULL);
 		if(t.tv_sec - start.tv_sec > TIMELIMIT) {
 			printf("%0.6f\n",
-			       ((MAX_FITNESS-lowestdiff) /
-				 (float)MAX_FITNESS)*100);
+			       ((MAX_FITNESS - lowestdiff) /
+				 (float)MAX_FITNESS) * 100);
 			exit(0);
 		}
 #ifdef DUMP
 		char filename[50];
 		sprintf(filename, "%d.data", getpid());
-		FILE * f = fopen(filename, "w");
+		FILE *f = fopen(filename, "w");
 		fwrite(dna_best, sizeof(s_t), NUM_SHAPES, f);
 		fclose(f);
 #endif
 #else
 		printf("Step = %d/%d\nFitness = %0.6f%%\n",
 		       beststep, teststep,
-		       ((MAX_FITNESS-lowestdiff)
-			 / (float)MAX_FITNESS)*100);
+		       ((MAX_FITNESS - lowestdiff)
+			 / (float)MAX_FITNESS) * 100);
 #endif
 		sleep(1);
 #ifdef SHOWWINDOW
@@ -308,30 +309,27 @@ void printstats()
 	}
 }
 
-static void mainloop(cairo_surface_t * pngsurf)
+static void mainloop(cairo_surface_t *pngsurf)
 {
-	pthread_t stats_thread;
-
-	pthread_create(&stats_thread, NULL, (void*)printstats, (void*)NULL);
 
 	init_dna(dna_best);
 	memcpy((void *)dna_test, (const void *)dna_best,
 	       sizeof(s_t) * NUM_SHAPES);
 
 #ifdef SHOWWINDOW
-	cairo_surface_t * xsurf =
+	cairo_surface_t *xsurf =
 	 cairo_xlib_surface_create(dpy, pixmap, DefaultVisual(dpy, screen),
 	                           width, height);
-	cairo_t * xcr = cairo_create(xsurf);
+	cairo_t *xcr = cairo_create(xsurf);
 #endif
 
-	cairo_surface_t * test_surf =
+	cairo_surface_t *test_surf =
 	 cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-	cairo_t * test_cr = cairo_create(test_surf);
+	cairo_t *test_cr = cairo_create(test_surf);
 
-	cairo_surface_t * goalsurf =
+	cairo_surface_t *goalsurf =
 	 cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
-	cairo_t * goalcr = cairo_create(goalsurf);
+	cairo_t *goalcr = cairo_create(goalsurf);
 	copy_surf_to(pngsurf, goalcr);
 
 	for(;;) {
@@ -366,8 +364,10 @@ static void mainloop(cairo_surface_t * pngsurf)
 	}
 }
 
-int main(int argc, char ** argv) {
-	cairo_surface_t * pngsurf;
+int main(int argc, char **argv) {
+	cairo_surface_t *pngsurf;
+	pthread_t stats_thread;
+
 	if(argc == 1) {
 		pngsurf = cairo_image_surface_create_from_png("mona.png");
 	} else {
@@ -384,5 +384,7 @@ int main(int argc, char ** argv) {
 	srandom(getpid() + time(NULL));
 	x_init();
 	mainloop(pngsurf);
+
+	pthread_create(&stats_thread, NULL, (void*)printstats, (void*)NULL);
 	return 0;
 }
