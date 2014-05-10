@@ -32,6 +32,12 @@
 int height, width;
 int mshape;
 
+
+int lowestdiff = INT_MAX;
+int teststep   = 0;
+int beststep   = 0;
+
+
 //////////////////////// X11 stuff ////////////////////////
 #ifdef SHOWWINDOW
 
@@ -261,13 +267,7 @@ void copy_surf_to(cairo_surface_t * surf, cairo_t * cr)
 	cairo_paint(cr);
 }
 
-typedef struct stats {
-	int *lowestdiff;
-	int *beststep;
-	int *teststep;
-} stats;
-
-void printstats(stats *pstats)
+void printstats()
 {
 	struct timeval start;
 	gettimeofday(&start, NULL);
@@ -277,7 +277,7 @@ void printstats(stats *pstats)
 		gettimeofday(&t, NULL);
 		if(t.tv_sec - start.tv_sec > TIMELIMIT) {
 			printf("%0.6f\n",
-			       ((MAX_FITNESS-*(pstats->lowestdiff)) /
+			       ((MAX_FITNESS-lowestdiff) /
 				 (float)MAX_FITNESS)*100);
 			exit(0);
 		}
@@ -290,8 +290,8 @@ void printstats(stats *pstats)
 #endif
 #else
 		printf("Step = %d/%d\nFitness = %0.6f%%\n",
-		       *(pstats->beststep), *(pstats->teststep),
-		       ((MAX_FITNESS-*(pstats->lowestdiff))
+		       beststep, teststep,
+		       ((MAX_FITNESS-lowestdiff)
 			 / (float)MAX_FITNESS)*100);
 #endif
 		sleep(1);
@@ -311,7 +311,8 @@ void printstats(stats *pstats)
 static void mainloop(cairo_surface_t * pngsurf)
 {
 	pthread_t stats_thread;
-	struct stats pstats;
+
+	pthread_create(&stats_thread, NULL, (void*)printstats, (void*)NULL);
 
 	init_dna(dna_best);
 	memcpy((void *)dna_test, (const void *)dna_best,
@@ -332,16 +333,6 @@ static void mainloop(cairo_surface_t * pngsurf)
 	 cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
 	cairo_t * goalcr = cairo_create(goalsurf);
 	copy_surf_to(pngsurf, goalcr);
-
-	int lowestdiff = INT_MAX;
-	int teststep = 0;
-	int beststep = 0;
-
-	//pstats = { &lowestdiff, &teststep, &beststep };
-	pstats.lowestdiff = &lowestdiff;
-	pstats.teststep = &teststep;
-	pstats.beststep = &beststep;
-	pthread_create(&stats_thread, NULL, (void*)printstats, (void*)&pstats);
 
 	for(;;) {
 		int other_mutated = mutate();
