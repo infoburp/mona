@@ -32,7 +32,6 @@
 int height, width;
 int mshape;
 
-
 int lowestdiff = INT_MAX;
 int teststep   = 0;
 int beststep   = 0;
@@ -48,6 +47,10 @@ Window   win;
 Display  *dpy;
 Pixmap   pixmap;
 int      screen;
+
+cairo_surface_t *xsurf;
+cairo_t *xcr;
+cairo_surface_t *test_surf;
 
 void x_init(void)
 {
@@ -268,7 +271,7 @@ void copy_surf_to(cairo_surface_t *surf, cairo_t *cr)
 	cairo_paint(cr);
 }
 
-void printstats()
+void printstats(cairo_surface_t *xsurf)
 {
 	struct timeval start;
 	gettimeofday(&start, NULL);
@@ -295,7 +298,6 @@ void printstats()
 		       ((MAX_FITNESS - lowestdiff)
 			 / (float)MAX_FITNESS) * 100);
 #endif
-		sleep(1);
 #ifdef SHOWWINDOW
 		XEvent xev;
 		XNextEvent(dpy, &xev);
@@ -305,32 +307,39 @@ void printstats()
 			          xev.xexpose.height, xev.xexpose.x,
 			          xev.xexpose.y);
 		}
+		XCopyArea(dpy, pixmap, win, gc, 0, 0, width, height, 0, 0);
+		XFlush(dpy);
 #endif
+	sleep(1);
 	}
 }
 
 static void mainloop(cairo_surface_t *pngsurf)
 {
-
-	init_dna(dna_best);
-	memcpy((void *)dna_test, (const void *)dna_best,
-	       sizeof(s_t) * NUM_SHAPES);
+	pthread_t stats_thread;
 
 #ifdef SHOWWINDOW
-	cairo_surface_t *xsurf =
+	xsurf =
 	 cairo_xlib_surface_create(dpy, pixmap, DefaultVisual(dpy, screen),
 	                           width, height);
-	cairo_t *xcr = cairo_create(xsurf);
+	xcr = cairo_create(xsurf);
 #endif
 
-	cairo_surface_t *test_surf =
+	test_surf =
 	 cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
 	cairo_t *test_cr = cairo_create(test_surf);
 
 	cairo_surface_t *goalsurf =
 	 cairo_image_surface_create(CAIRO_FORMAT_ARGB32, width, height);
+
 	cairo_t *goalcr = cairo_create(goalsurf);
 	copy_surf_to(pngsurf, goalcr);
+
+	init_dna(dna_best);
+	memcpy((void *)dna_test, (const void *)dna_best,
+	       sizeof(s_t) * NUM_SHAPES);
+
+	pthread_create(&stats_thread, NULL, (void*)printstats, (void*)NULL);
 
 	for(;;) {
 		int other_mutated = mutate();
@@ -345,13 +354,8 @@ static void mainloop(cairo_surface_t *pngsurf)
 				dna_best[other_mutated] =
 				 dna_test[other_mutated];
 			}
-#ifdef SHOWWINDOW
-			copy_surf_to(test_surf, xcr); // also copy to display
-			XCopyArea(dpy, pixmap, win, gc, 0, 0, width, height,
-			 0, 0);
-			XFlush(dpy);
-#endif
 			lowestdiff = diff;
+			copy_surf_to(test_surf, xcr); // also copy to display
 		} else {
 			// test sucks, copy best back over test
 			dna_test[mshape] = dna_best[mshape];
@@ -366,7 +370,6 @@ static void mainloop(cairo_surface_t *pngsurf)
 
 int main(int argc, char **argv) {
 	cairo_surface_t *pngsurf;
-	pthread_t stats_thread;
 
 	if(argc == 1) {
 		pngsurf = cairo_image_surface_create_from_png("mona.png");
@@ -385,6 +388,5 @@ int main(int argc, char **argv) {
 	x_init();
 	mainloop(pngsurf);
 
-	pthread_create(&stats_thread, NULL, (void*)printstats, (void*)NULL);
 	return 0;
 }
