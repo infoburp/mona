@@ -26,7 +26,7 @@ int WIDTH, HEIGHT;
 int POINTS = 6;
 int SHAPES = 40;
 //////////////////////// X11 stuff ////////////////////////
-#include <X11/Xlib.h>
+#include <X11/Xlib.h> 
 
 Display * dpy;
 int screen;
@@ -262,15 +262,16 @@ void copy_shape(shape_t* src, shape_t* dst, int index)
         dst[index].points[j].y = src[index].points[j].y;
     }
 }
-static void mainloop(cairo_surface_t * pngsurf)
+
+static void mainloop(shape_t* dna, cairo_surface_t * pngsurf)
 {
     struct timeval start;
     gettimeofday(&start, NULL);
-    dna_best = init_dna();
     dna_test = init_dna();
+
     /* copy dna_best to dna_test */
     for (int i = 0; i < SHAPES; i++)
-        copy_shape(dna_best, dna_test, i); 
+        copy_shape(dna, dna_test, i); 
     cairo_surface_t * xsurf = cairo_xlib_surface_create(
             dpy, pixmap, DefaultVisual(dpy, screen), WIDTH, HEIGHT);
     cairo_t * xcr = cairo_create(xsurf);
@@ -294,9 +295,9 @@ static void mainloop(cairo_surface_t * pngsurf)
         {
             beststep++;
             // test is good, copy to best
-            copy_shape(dna_test, dna_best, mutated_shape);
+            copy_shape(dna_test, dna, mutated_shape);
             if (other_mutated >= 0)
-                copy_shape(dna_test, dna_best, other_mutated);
+                copy_shape(dna_test, dna, other_mutated);
             copy_surf_to(test_surf, xcr); // also copy to display
             XCopyArea(dpy, pixmap, win, gc,
                     0, 0,
@@ -307,9 +308,9 @@ static void mainloop(cairo_surface_t * pngsurf)
         else
         {
             // test sucks, copy best back over test
-            copy_shape(dna_best, dna_test, mutated_shape);
+            copy_shape(dna, dna_test, mutated_shape);
             if (other_mutated >= 0)
-                copy_shape(dna_best, dna_test, other_mutated);
+                copy_shape(dna, dna_test, other_mutated);
         }
 
         teststep++;
@@ -331,8 +332,11 @@ static void mainloop(cairo_surface_t * pngsurf)
         }
 #else
         if (teststep % 100 == 0)
-            printf("Step:\t\t Improvement:%d Total:%d (%5.2f%%)\nResemblance:\t %0.6f%%\n",
-                    beststep, teststep,(((float)beststep)/((float)teststep))*100, ((MAX_FITNESS-lowestdiff) / (float)MAX_FITNESS)*100);
+        {
+            printf("Step:\t\t Improvement:%d Total:%d (%5.2f%%)\n",
+                    beststep, teststep,(((float)beststep)/((float)teststep))*100);
+            printf("Resemblance:\t %0.6f%%\n", ((MAX_FITNESS-lowestdiff) / (float)MAX_FITNESS)*100);
+        }
 #endif
 
         if (teststep % 100 == 0 && XPending(dpy))
@@ -370,21 +374,56 @@ void parse_sizearg(int* poly, int* point, char* arg)
     }
 }
 
+void dump_prompt()
+{
+    char prompt[256];
+    printf("\nDo you wish to dump your dna? (y/n)");
+    scanf("%255s", prompt);
+    printf(prompt);
+    if (strcmp(prompt, "y") == 0 || strcmp(prompt, "yes") == 0)
+    {
+        char filename[256];
+        printf("Filename: ");
+        scanf("%255s", filename);
+        save_dna(dna_best, filename);
+        exit(EXIT_SUCCESS);    
+    }
+    else if (strcmp(prompt, "n") == 0 || strcmp(prompt, "no") == 0)
+    {
+        exit(EXIT_SUCCESS); 
+    }
+    else
+    {
+        printf("Invalid entry.");
+        dump_prompt();
+    }
+
+}
+
 void usage()
 {
-    printf("Usage:\n\tmona [OPTIONS] [PNG FILE]\n\nOptions:\n\t-s [ShapeNum]x[PointNum]\t Changes the number of shapes and points\n");
+    printf("Usage:\n\tmona [OPTIONS] [PNG FILE]\n");
+    printf("Options\n");
+    printf("\t-s [ShapeNum]x[PointNum]\t Changes the number of shapes and points\n");
+    printf("\t-l [DnaFile]\tLoads a Dna JSON file\n");
 }
 
 int main(int argc, char ** argv) {
+    signal(SIGINT, dump_prompt);
     /* parse command line arguments */
     int c;
-    while ( (c = getopt(argc, argv, "s:")) != -1)
+    int flag_loaddna = 0;
+    char* dna_filename;
+    while ( (c = getopt(argc, argv, "s:l:")) != -1)
     {
         switch(c)
         {
         case 's':
             parse_sizearg(&SHAPES, &POINTS, optarg);
-            printf("poly = %d, point = %d\n", SHAPES, POINTS);
+            break;
+        case 'l':
+            flag_loaddna = 1;
+            dna_filename = optarg;
             break;
         default:
             printf("unknown option %c", (char)c);
@@ -405,7 +444,11 @@ int main(int argc, char ** argv) {
         /* start main loop  */
         srandom(getpid() + time(NULL));
         x_init();
-        mainloop(pngsurf);
+        if (flag_loaddna)
+            dna_best = load_dna(dna_filename);
+        else
+            dna_best = init_dna();
+        mainloop(dna_best, pngsurf);
     }
 }
 
