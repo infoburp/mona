@@ -380,6 +380,10 @@ int main(int argc, char ** argv) {
 	if(argc == 1) {
 		pngsurf = cairo_image_surface_create_from_png("mona.png");
 	} else {
+		if(access(argv[1], F_OK|R_OK)) {
+			perror(argv[1]);
+			return 1;
+		}
 		pngsurf = cairo_image_surface_create_from_png(argv[1]);
 	}
 
