@@ -54,6 +54,7 @@ cairo_surface_t *test_surf;
 
 void x_init(void)
 {
+	XInitThreads();
 	XSetWindowAttributes attr;
 	attr.background_pixmap = None;
 	attr.backing_store = Always;
@@ -300,15 +301,14 @@ void printstats(cairo_surface_t *xsurf)
 #endif
 #ifdef SHOWWINDOW
 		XEvent xev;
-		XNextEvent(dpy, &xev);
-		if(XPending(dpy) && xev.type == Expose) {
+		if(XPending(dpy) && XNextEvent(dpy, &xev) && xev.type == Expose) {
+		XLockDisplay(dpy);
 			XCopyArea(dpy, pixmap, win, gc, xev.xexpose.x,
 			          xev.xexpose.y, xev.xexpose.width,
 			          xev.xexpose.height, xev.xexpose.x,
 			          xev.xexpose.y);
+		XUnlockDisplay(dpy);
 		}
-		XCopyArea(dpy, pixmap, win, gc, 0, 0, width, height, 0, 0);
-		XFlush(dpy);
 #endif
 	sleep(1);
 	}
@@ -355,7 +355,11 @@ static void mainloop(cairo_surface_t *pngsurf)
 				 dna_test[other_mutated];
 			}
 			lowestdiff = diff;
+			XLockDisplay(dpy);
 			copy_surf_to(test_surf, xcr); // also copy to display
+			XCopyArea(dpy, pixmap, win, gc, 0, 0, width, height, 0, 0);
+			XFlush(dpy);
+			XUnlockDisplay(dpy);
 		} else {
 			// test sucks, copy best back over test
 			dna_test[mshape] = dna_best[mshape];
