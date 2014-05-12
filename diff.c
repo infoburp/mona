@@ -29,20 +29,20 @@ int difference(cairo_surface_t * test_surf, cairo_surface_t * goal_surf)
 		for (int x = 0; x < WIDTH; x++) {
 			int thispixel = y * WIDTH * 4 + x * 4;
 
-			unsigned char test_a = test_data[thispixel];
-			unsigned char test_r = test_data[thispixel + 1];
-			unsigned char test_g = test_data[thispixel + 2];
-			unsigned char test_b = test_data[thispixel + 3];
+                        // On little-endian machine test_data and goal_data have BGRA bytes order.
+                        // Since pre-multiplied alpha is used, we don`t need alpha byte at all.
+                        // FIXME: will not work on big-endian, need to fix.
+			unsigned char test_b = test_data[thispixel];
+			unsigned char test_g = test_data[thispixel + 1];
+			unsigned char test_r = test_data[thispixel + 2];
 
-			unsigned char goal_a = goal_data[thispixel];
-			unsigned char goal_r = goal_data[thispixel + 1];
-			unsigned char goal_g = goal_data[thispixel + 2];
-			unsigned char goal_b = goal_data[thispixel + 3];
+			unsigned char goal_b = goal_data[thispixel];
+			unsigned char goal_g = goal_data[thispixel + 1];
+			unsigned char goal_r = goal_data[thispixel + 2];
 
 			if (MAX_FITNESS == -1)
-				my_max_fitness += goal_a + goal_r + goal_g + goal_b;
+				my_max_fitness += goal_r + goal_g + goal_b;
 
-			difference += ABS(test_a - goal_a);
 			difference += ABS(test_r - goal_r);
 			difference += ABS(test_g - goal_g);
 			difference += ABS(test_b - goal_b);
