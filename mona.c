@@ -223,7 +223,9 @@ void write_dna(shape_t* dna)
 		strcat(fname_new, ".dna.new");
 
 		FILE *f = fopen(fname_new, "w");
-		fwrite(sizeof(shape_t), NUM_SHAPES, dna, f);
+                fwrite(&NUM_POINTS, sizeof(NUM_POINTS), 1, f);
+                fwrite(&NUM_SHAPES, sizeof(NUM_SHAPES), 1, f);
+                fwrite(dna, sizeof(shape_t), NUM_SHAPES, f);
 		fclose(f);
 
 		char fname[255];
@@ -233,6 +235,7 @@ void write_dna(shape_t* dna)
 		// If fname already exist, ensure that either fname or fname_new will be saved.
 		rename(fname_new, fname);
 }
+
 
 static bool running = true;
 
