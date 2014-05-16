@@ -1,6 +1,6 @@
 not reddit mona lisa meme thing in c.
 
-This fork (c) Kyle Mclamb, MIT License.
+This fork (c) Graeme Wolfendale, MIT License.
 originally written by nick welch <nick@incise.org>.
 
 COMPILE
