@@ -223,6 +223,8 @@ void write_dna(shape_t* dna)
 		strcat(fname_new, ".dna.new");
 
 		FILE *f = fopen(fname_new, "w");
+		fwrite(&HEIGHT, sizeof(HEIGHT), 1, f);
+		fwrite(&WIDTH, sizeof(WIDTH), 1, f);
                 fwrite(&NUM_POINTS, sizeof(NUM_POINTS), 1, f);
                 fwrite(&NUM_SHAPES, sizeof(NUM_SHAPES), 1, f);
                 fwrite(dna, sizeof(shape_t), NUM_SHAPES, f);
